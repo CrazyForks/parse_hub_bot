@@ -206,6 +206,7 @@ def _get_parse_user_id(_: Client, msg: Message, **__: Any) -> int | None:
     return msg.chat.id if msg.chat else None
 
 
+@with_request_id
 async def _handle_parse_request(
     cli: Client,
     msg: Message,
@@ -251,7 +252,6 @@ async def _handle_parse_request(
             loop.create_task(fn(e.retry_after))
 
 
-@with_request_id
 @parse_rate_limit(_get_parse_user_id)
 async def handle_parse(
     cli: Client,
