@@ -16,7 +16,7 @@ from parsehub.types import (
     VideoFile,
 )
 from pyrogram import Client, enums, filters
-from pyrogram.errors import FloodWait, SlowmodeWait, WebpageCurlFailed, WebpageMediaEmpty
+from pyrogram.errors import FloodWait, Forbidden, SlowmodeWait, WebpageCurlFailed, WebpageMediaEmpty
 from pyrogram.types import (
     InlineKeyboardButton as Ikb,
 )
@@ -78,6 +78,8 @@ async def _send_with_rate_limit[T](
                 await asyncio.sleep(e.value)
             else:
                 raise
+        except Forbidden as e:
+            logger.warning(f"消息发送失败, Bot 无权限: {e}")
     raise RuntimeError("发送重试失败")
 
 
@@ -127,6 +129,8 @@ class MessageStatusReporter(StatusReporter):
                     await self._msg.edit_text(text, **kwargs)
         except (FloodWait, SlowmodeWait):
             pass
+        except Forbidden as e:
+            logger.warning(f"消息发送失败, Bot 无权限: {e}")
 
 
 # ── Handler ──────────────────────────────────────────────────────────

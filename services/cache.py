@@ -193,5 +193,5 @@ class PersistentCache:
         return removed + await repo.remove_oldest(max(overflow, self._evict_batch_size))
 
 
-parse_cache = TTLCache(ttl=30 * 60, maxsize=1000)  # 解析结果缓存 30 分钟
+parse_cache = TTLCache(ttl=5 * 60, maxsize=1000)  # 解析结果缓存 5 分钟
 persistent_cache = PersistentCache(max_entries=bs.cache_max_entries, disable=bs.cache_disabled)

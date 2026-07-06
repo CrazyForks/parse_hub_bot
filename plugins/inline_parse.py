@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import Sequence
+from typing import Any
 
 from easy_ai18n import PreLocaleSelector
 from parsehub import AnyParseResult
@@ -10,7 +11,7 @@ from parsehub.types import (
     VideoRef,
 )
 from pyrogram import Client
-from pyrogram.errors import FloodWait
+from pyrogram.errors import FloodWait, Forbidden, SlowmodeWait
 from pyrogram.types import (
     ChosenInlineResult,
     InlineQuery,
@@ -76,19 +77,14 @@ class InlineStatusReporter(StatusReporter):
         if full == self._last_text:
             return
         self._last_text = full
-        try:
-            await self._cli.edit_inline_text(self._mid, full)
-        except FloodWait:
-            pass
+        await self._edit_inline_text(inline_message_id=self._mid, text=full)
 
     async def report_error(self, stage: str, error: Exception) -> None:
         text = self._t(f"**▎{stage}错误:** \n```\n{error}```")
         if bs.demo_mode:
             text += self._t("\n\n**问题反馈: @MisakaSisters**")
-        await self._cli.edit_inline_text(
-            self._mid,
-            text,
-            link_preview_options=LinkPreviewOptions(is_disabled=True),
+        await self._edit_inline_text(
+            inline_message_id=self._mid, text=text, link_preview_options=LinkPreviewOptions(is_disabled=True)
         )
 
         if self._user_config.keep_error_log:
@@ -96,14 +92,22 @@ class InlineStatusReporter(StatusReporter):
 
         async def fn() -> None:
             await asyncio.sleep(15)
-            await self._cli.edit_inline_text(
-                self._mid,
-                self._caption,
+            await self._edit_inline_text(
+                inline_message_id=self._mid,
+                text=self._caption,
                 link_preview_options=LinkPreviewOptions(is_disabled=True),
             )
 
         loop = asyncio.get_running_loop()
         loop.create_task(fn())
+
+    async def _edit_inline_text(self, **kwargs: Any) -> None:
+        try:
+            await self._cli.edit_inline_text(**kwargs)
+        except (FloodWait, SlowmodeWait):
+            pass
+        except Forbidden as e:
+            logger.warning(f"消息发送失败, Bot 无权限: {e}")
 
     async def dismiss(self) -> None:
         pass
