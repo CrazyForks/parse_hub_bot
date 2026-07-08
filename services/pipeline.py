@@ -3,6 +3,7 @@ import shutil
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import TracebackType
 from typing import Any, Protocol
 
 from easy_ai18n import PreLocaleSelector
@@ -43,6 +44,7 @@ class PipelineResult:
         if self.output_dir:
             logger.debug("清理资源")
             shutil.rmtree(self.output_dir, ignore_errors=True)
+            self.output_dir = None
 
 
 class PipelineProgressCallback:
@@ -70,7 +72,7 @@ class ParsePipeline:
 
     内置 Singleflight 机制：对同一 URL 的并发调用只会执行一次流水线，
     其余调用等待 Event 完成后返回 None（调用方应重新检查缓存）。
-    首个调用方在完成上传+缓存后必须调用 finish() 以释放等待者。
+    使用 with 创建实例，退出上下文时会自动 finish() 并清理流水线输出。
     """
 
     def __init__(
@@ -104,6 +106,20 @@ class ParsePipeline:
         self._richtext_skip_download = richtext_skip_download
         self._save_metadata = save_metadata
         self._t = _t
+        self._result: PipelineResult | None = None
+        self._owns_inflight = False
+
+    def __enter__(self) -> "ParsePipeline":
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        self.finish()
+        self.cleanup()
 
     @property
     def waited(self) -> bool:
@@ -111,10 +127,18 @@ class ParsePipeline:
         return self._waited
 
     def finish(self) -> None:
-        """首个调用方完成上传+缓存后调用，释放所有等待者"""
+        """释放等待同一 URL 的 singleflight 调用方"""
+        if not self._owns_inflight:
+            return
         event = _inflight.pop(self._raw_url, None)
         if event is not None:
             event.set()
+        self._owns_inflight = False
+
+    def cleanup(self) -> None:
+        """清理流水线输出资源"""
+        if self._result is not None:
+            self._result.cleanup()
 
     async def run(self) -> PipelineResult | None:
         """执行流水线，返回 PipelineResult 或 None（失败时已通知）"""
@@ -132,9 +156,11 @@ class ParsePipeline:
 
             event = asyncio.Event()
             _inflight[key] = event
+            self._owns_inflight = True
 
         try:
             result = await self._execute()
+            self._result = result
             if result is None:
                 logger.debug("流水线失败, 立即释放等待者")
                 self.finish()

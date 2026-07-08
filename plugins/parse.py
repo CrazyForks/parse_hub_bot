@@ -304,7 +304,7 @@ async def handle_parse(
         return
 
     cached_parse_result = None if bypass_cache else await parse_cache.get(raw_url)
-    pipeline = ParsePipeline(
+    with ParsePipeline(
         url,
         raw_url,
         reporter,
@@ -315,35 +315,33 @@ async def handle_parse(
         gif_only_skip_download_count_threshold=GIF_ONLY_SKIP_DOWNLOAD_COUNT_THRESHOLD if mode == "preview" else 0,
         save_metadata=save_metadata,
         _t=_t,
-    )
-
-    if (result := await pipeline.run()) is None:
-        if pipeline.waited:
-            logger.debug("Singleflight 等待完成, 重新检查缓存")
-            if not bypass_cache and (cached := await persistent_cache.get(raw_url)):
-                await _send_cached(msg, cached, raw_url, user_config=user_config)
+    ) as pipeline:
+        if (result := await pipeline.run()) is None:
+            if pipeline.waited:
+                logger.debug("Singleflight 等待完成, 重新检查缓存")
+                if not bypass_cache and (cached := await persistent_cache.get(raw_url)):
+                    await _send_cached(msg, cached, raw_url, user_config=user_config)
+                else:
+                    await handle_parse(
+                        cli,
+                        msg,
+                        url=url,
+                        mode=mode,
+                        bypass_cache=bypass_cache,
+                        _t=_t,
+                        user_config=user_config,
+                    )
+                    return
             else:
-                await handle_parse(
-                    cli,
-                    msg,
-                    url=url,
-                    mode=mode,
-                    bypass_cache=bypass_cache,
-                    _t=_t,
-                    user_config=user_config,
-                )
-                return
-        else:
-            logger.debug("Pipeline 返回 None, 跳过后续处理")
-        return
+                logger.debug("Pipeline 返回 None, 跳过后续处理")
+            return
 
-    parse_result = result.parse_result
-    await parse_cache.set(raw_url, parse_result)
+        parse_result = result.parse_result
+        await parse_cache.set(raw_url, parse_result)
 
-    # ── 富文本 → Telegraph ──
-    if parse_result.type == PostType.RICHTEXT:
-        logger.debug(f"富文本类型, 创建 Telegraph 页面: title={parse_result.title}")
-        try:
+        # ── 富文本 → Telegraph ──
+        if parse_result.type == PostType.RICHTEXT:
+            logger.debug(f"富文本类型, 创建 Telegraph 页面: title={parse_result.title}")
             await msg.reply_chat_action(enums.ChatAction.TYPING)
             ph_url = await create_richtext_telegraph(cli, parse_result)
             logger.debug(f"Telegraph 页面创建完成: {ph_url}")
@@ -363,61 +361,56 @@ async def handle_parse(
             )
             await reporter.dismiss()
             return
-        finally:
-            pipeline.finish()
 
-    caption = build_caption(parse_result, hide_source=user_config.hide_source)
-    gif_only = all(isinstance(i, AniRef) for i in to_list(parse_result.media))
-    if mode == "preview" and gif_only and len(to_list(parse_result.media)) > GIF_ONLY_SKIP_DOWNLOAD_COUNT_THRESHOLD:
-        await _send_with_rate_limit(
-            lambda: msg.reply_text(
-                caption,
-                reply_markup=_build_gif_button(to_list(parse_result.media)),
-                link_preview_options=LinkPreviewOptions(is_disabled=True),
+        caption = build_caption(parse_result, hide_source=user_config.hide_source)
+        gif_only = all(isinstance(i, AniRef) for i in to_list(parse_result.media))
+        if mode == "preview" and gif_only and len(to_list(parse_result.media)) > GIF_ONLY_SKIP_DOWNLOAD_COUNT_THRESHOLD:
+            await _send_with_rate_limit(
+                lambda: msg.reply_text(
+                    caption,
+                    reply_markup=_build_gif_button(to_list(parse_result.media)),
+                    link_preview_options=LinkPreviewOptions(is_disabled=True),
+                )
             )
-        )
-        await reporter.dismiss()
-        pipeline.finish()
-        return
+            await reporter.dismiss()
+            return
 
-    if not result.processed_list:
-        logger.debug("无媒体文件, 仅发送文本")
-        await msg.reply_chat_action(enums.ChatAction.TYPING)
-        await _send_with_rate_limit(
-            lambda: msg.reply_text(
-                caption,
-                link_preview_options=LinkPreviewOptions(is_disabled=True),
+        if not result.processed_list:
+            logger.debug("无媒体文件, 仅发送文本")
+            await msg.reply_chat_action(enums.ChatAction.TYPING)
+            await _send_with_rate_limit(
+                lambda: msg.reply_text(
+                    caption,
+                    link_preview_options=LinkPreviewOptions(is_disabled=True),
+                )
             )
-        )
-        cache_entry = CacheEntry(parse_result=CacheParseResult(title=parse_result.title, content=parse_result.content))
-        await persistent_cache.set(raw_url, cache_entry)
-        await reporter.dismiss()
-        pipeline.finish()
-        return
+            cache_entry = CacheEntry(
+                parse_result=CacheParseResult(title=parse_result.title, content=parse_result.content)
+            )
+            await persistent_cache.set(raw_url, cache_entry)
+            await reporter.dismiss()
+            return
 
-    if mode == "raw":
-        await _send_raw(msg, result, reporter, _t=_t, user_config=user_config)
-        return
-    if mode == "zip":
-        await _send_zip(msg, result, reporter, _t=_t, user_config=user_config)
-        return
+        if mode == "raw":
+            await _send_raw(msg, result, reporter, _t=_t, user_config=user_config)
+            return
+        if mode == "zip":
+            await _send_zip(msg, result, reporter, _t=_t, user_config=user_config)
+            return
 
-    # ── 上传媒体 ──
-    logger.debug(f"开始上传媒体: media_count={len(result.processed_list)}")
-    await reporter.report(_t("上 传 中..."))
-    try:
-        media_cache_entry = await _send_media(msg, parse_result, result.processed_list, caption, _t=_t)
-        if media_cache_entry:
-            await persistent_cache.set(raw_url, media_cache_entry)
-        await reporter.dismiss()
-    except Exception as e:
-        logger.opt(exception=e).debug("详细堆栈")
-        logger.error(f"上传失败: {e}")
-        await reporter.report_error(_t("上传"), e)
-        return
-    finally:
-        result.cleanup()
-        pipeline.finish()
+        # ── 上传媒体 ──
+        logger.debug(f"开始上传媒体: media_count={len(result.processed_list)}")
+        await reporter.report(_t("上 传 中..."))
+        try:
+            media_cache_entry = await _send_media(msg, parse_result, result.processed_list, caption, _t=_t)
+            if media_cache_entry:
+                await persistent_cache.set(raw_url, media_cache_entry)
+            await reporter.dismiss()
+        except Exception as e:
+            logger.opt(exception=e).debug("详细堆栈")
+            logger.error(f"上传失败: {e}")
+            await reporter.report_error(_t("上传"), e)
+            return
 
 
 # ── 构建 InputMedia ──────────────────────────────────────────────────

@@ -377,51 +377,50 @@ async def inline_result_download(cli: Client, chosen_result: ChosenInlineResult)
 
     caption = build_caption(cached_result, hide_source=current.config.hide_source) if cached_result else ""
     reporter = InlineStatusReporter(cli, inline_message_id, caption, _t=_t, user_config=current.config)
-    pipeline = ParsePipeline(query, raw_url, reporter, parse_result=cached_result, singleflight=False, _t=_t)
-    if (result := await pipeline.run()) is None:
-        return
+    with ParsePipeline(query, raw_url, reporter, parse_result=cached_result, singleflight=False, _t=_t) as pipeline:
+        if (result := await pipeline.run()) is None:
+            return
 
-    parse_result = result.parse_result
-    caption = build_caption(parse_result, hide_source=current.config.hide_source)
+        parse_result = result.parse_result
+        caption = build_caption(parse_result, hide_source=current.config.hide_source)
 
-    # ── 上传 ──
-    await reporter.report(_t("上 传 中..."))
+        # ── 上传 ──
+        await reporter.report(_t("上 传 中..."))
 
-    processed = result.processed_list[media_index]
-    video_ref = parse_result.media[media_index] if isinstance(parse_result.media, Sequence) else parse_result.media
+        processed = result.processed_list[media_index]
+        video_ref = parse_result.media[media_index] if isinstance(parse_result.media, Sequence) else parse_result.media
 
-    try:
-        file_paths = processed.output_paths or [processed.source.path]
-        file_path_str = str(file_paths[0])
-        logger.debug(f"inline 上传文件: {file_path_str}")
-        width, height, duration = resolve_media_info(processed, file_path_str)
+        try:
+            file_paths = processed.output_paths or [processed.source.path]
+            file_path_str = str(file_paths[0])
+            logger.debug(f"inline 上传文件: {file_path_str}")
+            width, height, duration = resolve_media_info(processed, file_path_str)
 
-        video_cover = str(video_ref.thumb_url) if video_ref and video_ref.thumb_url else None
-        media = (
-            InputMediaVideo(
-                file_path_str,
-                caption=caption,
-                video_cover=video_cover,
-                duration=duration or 0,
-                width=width or 0,
-                height=height or 0,
-                supports_streaming=True,
+            video_cover = str(video_ref.thumb_url) if video_ref and video_ref.thumb_url else None
+            media = (
+                InputMediaVideo(
+                    file_path_str,
+                    caption=caption,
+                    video_cover=video_cover,
+                    duration=duration or 0,
+                    width=width or 0,
+                    height=height or 0,
+                    supports_streaming=True,
+                )
+                if video_cover
+                else InputMediaVideo(
+                    file_path_str,
+                    caption=caption,
+                    duration=duration or 0,
+                    width=width or 0,
+                    height=height or 0,
+                    supports_streaming=True,
+                )
             )
-            if video_cover
-            else InputMediaVideo(
-                file_path_str,
-                caption=caption,
-                duration=duration or 0,
-                width=width or 0,
-                height=height or 0,
-                supports_streaming=True,
-            )
-        )
-        await cli.edit_inline_media(inline_message_id, media=media)
-    except Exception as e:
-        logger.opt(exception=e).debug("详细堆栈")
-        logger.error(f"inline 上传失败: {e}")
-        await reporter.report_error(_t("上传"), e)
-    finally:
-        logger.debug("inline 下载任务完成")
-        result.cleanup()
+            await cli.edit_inline_media(inline_message_id, media=media)
+        except Exception as e:
+            logger.opt(exception=e).debug("详细堆栈")
+            logger.error(f"inline 上传失败: {e}")
+            await reporter.report_error(_t("上传"), e)
+        finally:
+            logger.debug("inline 下载任务完成")
