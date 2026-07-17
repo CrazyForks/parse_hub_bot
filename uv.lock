@@ -566,11 +566,11 @@ wheels = [
 
 [[package]]
 name = "filelock"
-version = "3.30.0"
+version = "3.30.2"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/83/2b/8b6480a70a647035334a604d0931926de4b5cd1f57835d45ad5eed2b1a1e/filelock-3.30.0.tar.gz", hash = "sha256:1774e682dbe443bd60f9609162fc596e2c80dc84ffc2957068953406d0520090", size = 174927, upload-time = "2026-07-16T03:53:58.152Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/02/f7/2165ef325da22d854b8f81ca4799395f2eb6afa55cdb52c7710f028b5336/filelock-3.30.2.tar.gz", hash = "sha256:1ea7c857465c897a4a6e64c1aace28ff6b83f5bc66c1c06ea148efa65bc2ec5d", size = 176823, upload-time = "2026-07-16T19:50:42.724Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/52/af/9b01bcf5c91e81899bb890b87bd9077732a9b3365c098e67fe77958c39ed/filelock-3.30.0-py3-none-any.whl", hash = "sha256:40632998f0772e64183bb819f086a1b9def6be1090cf1dcb9d45f46806ef279b", size = 93131, upload-time = "2026-07-16T03:53:56.727Z" },
+    { url = "https://files.pythonhosted.org/packages/02/df/05118016cad66cd0d7c9417b2d4fc245be35decc4c36810f3c8dbf729d88/filelock-3.30.2-py3-none-any.whl", hash = "sha256:a64b58f75048ec39589983e97f5117163f822261dcb6ba843e098f05aac9663f", size = 94092, upload-time = "2026-07-16T19:50:41.189Z" },
 ]
 
 [[package]]
@@ -1465,7 +1465,7 @@ wheels = [
 
 [[package]]
 name = "openai"
-version = "2.45.0"
+version = "2.46.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -1477,9 +1477,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/78/60/d4219875289b11d2c2f7da93c36283da224a2e55865ed865ab64e0ce9217/openai-2.45.0.tar.gz", hash = "sha256:10d34ca9c5643bce775852fddbfc172505cb1d4de1ccd101696c3ecff358765d", size = 1109653, upload-time = "2026-07-09T18:02:44.091Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/af/ac/f725c4efbda8657d02be684607e5a2e5ce362e4790fdbcbdfb7c15018647/openai-2.46.0.tar.gz", hash = "sha256:0421e0735ac41451cad894af4cddf0435bfbf8cbc538ac0e15b3c062f2ddc06a", size = 1114628, upload-time = "2026-07-17T02:48:06.05Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f1/b0/2291689e3ec4723fbf5bbf3b54afcd7b160f9ddc98ca7aedfd0132af5677/openai-2.45.0-py3-none-any.whl", hash = "sha256:5df105f5f8c9b711fcb9d06d2d3888cebc82506db216484c14a4e53cdf651777", size = 1629470, upload-time = "2026-07-09T18:02:42.21Z" },
+    { url = "https://files.pythonhosted.org/packages/ea/7b/206238ebcb50b235942b1c66dba4974776f2057402a8d91c399be587d66a/openai-2.46.0-py3-none-any.whl", hash = "sha256:672381db55efb3a1e2610f29304c130cccdd0b319bace4d492b2443cb64c1e7c", size = 1637556, upload-time = "2026-07-17T02:48:03.695Z" },
 ]
 
 [[package]]
@@ -1503,7 +1503,7 @@ wheels = [
 
 [[package]]
 name = "parsehub"
-version = "2.1.4"
+version = "2.1.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiofiles" },
@@ -1527,9 +1527,9 @@ dependencies = [
     { name = "urlextract" },
     { name = "yt-dlp", extra = ["default"] },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8f/97/8a002efe4d4b9fabef223219e4b0fe0f1e8fb0436c7a89b23fe88527ff97/parsehub-2.1.4.tar.gz", hash = "sha256:b9c6d3efee25f4f03f7de94cbc06a90ad18b6f245eb00cb8f74af46543eb27b7", size = 106739, upload-time = "2026-07-16T15:37:49.96Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e8/be/6081ec08df9cf86eaa9341384cae64a5e4d5662aabb74975c0b7812780d8/parsehub-2.1.5.tar.gz", hash = "sha256:878499d48aa685e48701617ad796b5d1fa766a3e1b91e2e1d722eb7f7b9e0647", size = 107965, upload-time = "2026-07-17T05:22:57.598Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8f/c0/827358c7b06a0510f7101901b67d6de9eef10182d9e99a7ca8c76b489582/parsehub-2.1.4-py3-none-any.whl", hash = "sha256:da5d1dd2b6c6e9aa900b3ada7cc222b4790e0c25038eb4e5b31af80bd9cdefa1", size = 120086, upload-time = "2026-07-16T15:37:48.582Z" },
+    { url = "https://files.pythonhosted.org/packages/64/e5/d62004ae4a68110fbf8aef8e4235dbae8f28e5bbfe92973b26494b41de56/parsehub-2.1.5-py3-none-any.whl", hash = "sha256:9a8489fd4a5c4ea06a785473bb9260d78ffc0d61f229d8dbe12b0eba08766336", size = 122176, upload-time = "2026-07-17T05:22:56.141Z" },
 ]
 
 [[package]]

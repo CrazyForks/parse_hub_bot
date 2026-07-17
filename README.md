@@ -19,6 +19,9 @@
   </a>
 </p>
 
+简体中文 |
+[English](README.en.md)
+
 [**🤖 实例演示**](https://t.me/ParseHubot) ·
 [**📚 相关项目**](https://github.com/z-mio/ParseHub) ·
 [**🐛 问题反馈**](https://github.com/z-mio/Parse_Hub_Bot/issues)
@@ -181,6 +184,7 @@ platforms:
 
 - `Twitter / X`
 - `Instagram`
+- `Threads`
 - `YouTube`
 - `Bilibili`
 - `抖音`
