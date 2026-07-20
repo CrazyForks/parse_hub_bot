@@ -11,8 +11,10 @@ from parsehub.types import AnyMediaFile, AnyParseResult, DownloadResult, RichTex
 from parsehub.utils.media_info import MediaInfoReader
 from pyrogram import Client
 
+from db import get_session
 from i18n import t_
 from log import logger
+from services import UserService
 from utils.converter import clean_article_html
 from utils.helpers import to_list
 from utils.media_processing_unit import MediaProcessingUnit
@@ -29,7 +31,6 @@ COMMANDS = {
     "lang": t_("选择语言"),
     "mode": t_("设置默认解析模式"),
     "switches": t_("其他功能开关"),
-    "switch_auto_delete": t_("启用/禁用 自动删除分享链接消息"),
     "switch_platform": t_("启用/禁用 平台解析"),
 }
 
@@ -48,7 +49,6 @@ def build_start_text() -> LocaleContent:
         f"/lang - 选择语言\n"
         f"/mode - 设置默认解析模式\n"
         f"/switches - 其他功能开关\n"
-        f"/switch_auto_delete - 启用/禁用 自动删除分享链接消息\n"
         f"/switch_platform - 启用/禁用 平台解析\n"
         f"</blockquote>\n\n"
         f"**开源地址: [GitHub](https://github.com/z-mio/parse_hub_bot)**"
@@ -178,3 +178,8 @@ def get_supported_platforms() -> str:
         text.append(f"**{i['name']}** __({'__, __'.join(i['supported_types'])})__")
     text.sort(reverse=True)
     return "\n".join(text)
+
+
+async def get_lang(telegram_user_id: int) -> str:
+    async with get_session() as session:
+        return await UserService(session).get_lang(telegram_user_id)

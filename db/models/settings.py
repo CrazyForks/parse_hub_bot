@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from db.models.user import User
 
 
-class Scope(enum.Enum):
+class SettingsScope(enum.Enum):
     USER = "user"
     GROUP = "group"
     GROUP_MEMBER = "group_member"
@@ -103,8 +103,8 @@ class Settings(Base):
         primary_key=True,
         autoincrement=True,
     )
-    scope: Mapped[Scope] = mapped_column(
-        Enum(Scope, name="settings_scope", values_callable=lambda e: [m.value for m in e]),
+    scope: Mapped[SettingsScope] = mapped_column(
+        Enum(SettingsScope, name="settings_scope", values_callable=lambda e: [m.value for m in e]),
         nullable=False,
     )
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=True)

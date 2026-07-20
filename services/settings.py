@@ -1,180 +1,147 @@
 from dataclasses import dataclass
-from typing import Self, Unpack
+from typing import Literal, TypedDict, Unpack
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models.chat import ChatType
-from db.models.settings import Scope
-from repo.chat import ChatRepo
-from repo.forum_topic import ForumTopicRepo
-from repo.settings import Config, ConfigPatch, SettingsRepo, SettingsTarget
-from repo.user import UserRepo
+from db.models.settings import SettingsScope
+from repo.settings import Config, DefaultMode, SettingsRepo
+from repo.settings.repo import SettingsTarget
+from services.chat import ChatService
+from services.forum_topic import ForumTopicService
+from services.user import UserService
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class UserSettingsTarget:
+    scope: Literal[SettingsScope.USER] = SettingsScope.USER
+    telegram_user_id: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GroupSettingsTarget:
+    scope: Literal[SettingsScope.GROUP] = SettingsScope.GROUP
+    telegram_chat_id: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class GroupMemberSettingsTarget:
+    scope: Literal[SettingsScope.GROUP_MEMBER] = SettingsScope.GROUP_MEMBER
+    telegram_user_id: int
+    telegram_chat_id: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ForumTopicSettingsTarget:
+    scope: Literal[SettingsScope.FORUM_TOPIC] = SettingsScope.FORUM_TOPIC
+    telegram_chat_id: int
+    telegram_thread_id: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ForumTopicMemberSettingsTarget:
+    scope: Literal[SettingsScope.FORUM_TOPIC_MEMBER] = SettingsScope.FORUM_TOPIC_MEMBER
+    telegram_user_id: int
+    telegram_chat_id: int
+    telegram_thread_id: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ChannelSettingsTarget:
+    scope: Literal[SettingsScope.CHANNEL] = SettingsScope.CHANNEL
+    telegram_chat_id: int
+
+
+type AnySettingsTarget = (
+    UserSettingsTarget
+    | GroupSettingsTarget
+    | GroupMemberSettingsTarget
+    | ForumTopicSettingsTarget
+    | ForumTopicMemberSettingsTarget
+    | ChannelSettingsTarget
+)
+
+
+class ConfigPatch(TypedDict, total=False):
+    default_mode: DefaultMode
+    auto_delete_url: bool
+    disabled_platforms: list[str]
+    enable_inline_raw_url: bool
+    keep_error_log: bool
+    hide_source: bool
+    noprogress: bool
+
+
 class TelegramSettingsTarget:
-    scope: Scope
-    telegram_user_id: int | None = None
-    telegram_chat_id: int | None = None
-    telegram_thread_id: int | None = None
-    chat_type: ChatType | None = None
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.scope, Scope):
-            raise TypeError("scope 必须是 Scope 枚举值。")
-
-        expected_fields = {
-            Scope.USER: {"telegram_user_id"},
-            Scope.GROUP: {"telegram_chat_id", "chat_type"},
-            Scope.GROUP_MEMBER: {"telegram_user_id", "telegram_chat_id", "chat_type"},
-            Scope.FORUM_TOPIC: {"telegram_chat_id", "telegram_thread_id", "chat_type"},
-            Scope.FORUM_TOPIC_MEMBER: {
-                "telegram_user_id",
-                "telegram_chat_id",
-                "telegram_thread_id",
-                "chat_type",
-            },
-            Scope.CHANNEL: {"telegram_chat_id", "chat_type"},
-        }[self.scope]
-        values = {
-            "telegram_user_id": self.telegram_user_id,
-            "telegram_chat_id": self.telegram_chat_id,
-            "telegram_thread_id": self.telegram_thread_id,
-            "chat_type": self.chat_type,
-        }
-        actual_fields = {name for name, value in values.items() if value is not None}
-        if actual_fields != expected_fields:
-            raise ValueError(f"{self.scope.value} scope 必须且只能指定 {sorted(expected_fields)}。")
-
-        if self.telegram_user_id is not None:
-            self._validate_positive_id("telegram_user_id", self.telegram_user_id)
-        if self.telegram_chat_id is not None:
-            if (
-                isinstance(self.telegram_chat_id, bool)
-                or not isinstance(self.telegram_chat_id, int)
-                or self.telegram_chat_id == 0
-            ):
-                raise ValueError("telegram_chat_id 必须是非零整数。")
-        if self.telegram_thread_id is not None:
-            self._validate_positive_id("telegram_thread_id", self.telegram_thread_id)
-
-        if self.chat_type is not None and not isinstance(self.chat_type, ChatType):
-            raise TypeError("chat_type 必须是 ChatType 枚举值。")
-        if self.scope in {Scope.GROUP, Scope.GROUP_MEMBER} and self.chat_type not in {
-            ChatType.GROUP,
-            ChatType.SUPERGROUP,
-        }:
-            raise ValueError("group scope 仅支持 GROUP 或 SUPERGROUP chat_type。")
-        if self.scope in {Scope.FORUM_TOPIC, Scope.FORUM_TOPIC_MEMBER} and self.chat_type is not ChatType.SUPERGROUP:
-            raise ValueError("forum topic scope 仅支持 SUPERGROUP chat_type。")
-        if self.scope is Scope.CHANNEL and self.chat_type is not ChatType.CHANNEL:
-            raise ValueError("channel scope 仅支持 CHANNEL chat_type。")
-
-    @classmethod
-    def user(cls, telegram_user_id: int) -> Self:
-        return cls(scope=Scope.USER, telegram_user_id=telegram_user_id)
-
-    @classmethod
-    def group(cls, telegram_chat_id: int, chat_type: ChatType) -> Self:
-        return cls(scope=Scope.GROUP, telegram_chat_id=telegram_chat_id, chat_type=chat_type)
-
-    @classmethod
-    def group_member(cls, telegram_user_id: int, telegram_chat_id: int, chat_type: ChatType) -> Self:
-        return cls(
-            scope=Scope.GROUP_MEMBER,
-            telegram_user_id=telegram_user_id,
-            telegram_chat_id=telegram_chat_id,
-            chat_type=chat_type,
-        )
-
-    @classmethod
-    def forum_topic(cls, telegram_chat_id: int, telegram_thread_id: int, chat_type: ChatType) -> Self:
-        return cls(
-            scope=Scope.FORUM_TOPIC,
-            telegram_chat_id=telegram_chat_id,
-            telegram_thread_id=telegram_thread_id,
-            chat_type=chat_type,
-        )
-
-    @classmethod
-    def forum_topic_member(
-        cls,
-        telegram_user_id: int,
-        telegram_chat_id: int,
-        telegram_thread_id: int,
-        chat_type: ChatType,
-    ) -> Self:
-        return cls(
-            scope=Scope.FORUM_TOPIC_MEMBER,
-            telegram_user_id=telegram_user_id,
-            telegram_chat_id=telegram_chat_id,
-            telegram_thread_id=telegram_thread_id,
-            chat_type=chat_type,
-        )
-
-    @classmethod
-    def channel(cls, telegram_chat_id: int, chat_type: ChatType) -> Self:
-        return cls(scope=Scope.CHANNEL, telegram_chat_id=telegram_chat_id, chat_type=chat_type)
+    @staticmethod
+    def user(telegram_user_id: int) -> UserSettingsTarget:
+        return UserSettingsTarget(telegram_user_id=telegram_user_id)
 
     @staticmethod
-    def _validate_positive_id(name: str, value: int) -> None:
-        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-            raise ValueError(f"{name} 必须是正整数。")
+    def group(telegram_chat_id: int) -> GroupSettingsTarget:
+        return GroupSettingsTarget(telegram_chat_id=telegram_chat_id)
+
+    @staticmethod
+    def group_member(telegram_user_id: int, telegram_chat_id: int) -> GroupMemberSettingsTarget:
+        return GroupMemberSettingsTarget(
+            telegram_user_id=telegram_user_id,
+            telegram_chat_id=telegram_chat_id,
+        )
+
+    @staticmethod
+    def forum_topic(telegram_chat_id: int, telegram_thread_id: int) -> ForumTopicSettingsTarget:
+        return ForumTopicSettingsTarget(telegram_chat_id=telegram_chat_id, telegram_thread_id=telegram_thread_id)
+
+    @staticmethod
+    def forum_topic_member(
+        telegram_user_id: int, telegram_chat_id: int, telegram_thread_id: int
+    ) -> ForumTopicMemberSettingsTarget:
+        return ForumTopicMemberSettingsTarget(
+            telegram_user_id=telegram_user_id,
+            telegram_chat_id=telegram_chat_id,
+            telegram_thread_id=telegram_thread_id,
+        )
+
+    @staticmethod
+    def channel(telegram_chat_id: int) -> ChannelSettingsTarget:
+        return ChannelSettingsTarget(telegram_chat_id=telegram_chat_id)
 
 
 class SettingsService:
     def __init__(self, session: AsyncSession) -> None:
-        self.users = UserRepo(session)
-        self.chats = ChatRepo(session)
-        self.forum_topics = ForumTopicRepo(session)
+        self.user = UserService(session)
+        self.chat = ChatService(session)
+        self.forum_topic = ForumTopicService(session)
         self.settings = SettingsRepo(session)
 
-    async def get_config(self, target: TelegramSettingsTarget) -> Config:
+    async def get_config(self, target: AnySettingsTarget) -> Config:
         return await self.settings.get_config(await self._resolve(target))
 
-    async def save_config(self, target: TelegramSettingsTarget, config: Config) -> Config:
-        settings = await self.settings.save_config(await self._resolve(target), config)
-        return self.settings.config_from_raw(settings.config)
-
-    async def patch_config(self, target: TelegramSettingsTarget, **kwargs: Unpack[ConfigPatch]) -> Config:
+    async def patch_config(self, target: AnySettingsTarget, **kwargs: Unpack[ConfigPatch]) -> Config:
         return await self.settings.patch_config(await self._resolve(target), **kwargs)
 
-    async def _resolve(self, target: TelegramSettingsTarget) -> SettingsTarget:
-        if target.scope is Scope.USER:
-            telegram_user_id = target.telegram_user_id
-            assert telegram_user_id is not None
-            user = await self.users.ensure_by_telegram_user_id(telegram_user_id)
-            return SettingsTarget.user(user.id)
-
-        if target.scope in {Scope.GROUP, Scope.CHANNEL}:
-            telegram_chat_id = target.telegram_chat_id
-            chat_type = target.chat_type
-            assert telegram_chat_id is not None and chat_type is not None
-            chat = await self.chats.ensure_by_telegram_chat_id(telegram_chat_id, chat_type)
-            return SettingsTarget.group(chat.id) if target.scope is Scope.GROUP else SettingsTarget.channel(chat.id)
-
-        if target.scope is Scope.GROUP_MEMBER:
-            telegram_user_id = target.telegram_user_id
-            telegram_chat_id = target.telegram_chat_id
-            chat_type = target.chat_type
-            assert telegram_user_id is not None and telegram_chat_id is not None and chat_type is not None
-            user = await self.users.ensure_by_telegram_user_id(telegram_user_id)
-            chat = await self.chats.ensure_by_telegram_chat_id(telegram_chat_id, chat_type)
-            return SettingsTarget.group_member(chat.id, user.id)
-
-        telegram_chat_id = target.telegram_chat_id
-        telegram_thread_id = target.telegram_thread_id
-        chat_type = target.chat_type
-        assert telegram_chat_id is not None and telegram_thread_id is not None and chat_type is not None
-        topic = await self.forum_topics.ensure_by_telegram_chat_id_and_thread_id(
-            telegram_chat_id,
-            telegram_thread_id,
-            chat_type,
-        )
-        if target.scope is Scope.FORUM_TOPIC:
-            return SettingsTarget.forum_topic(topic.id)
-
-        telegram_user_id = target.telegram_user_id
-        assert telegram_user_id is not None
-        user = await self.users.ensure_by_telegram_user_id(telegram_user_id)
-        return SettingsTarget.forum_topic_member(topic.id, user.id)
+    async def _resolve(self, target: AnySettingsTarget) -> SettingsTarget:
+        match target:
+            case UserSettingsTarget(telegram_user_id=telegram_user_id):
+                user = await self.user.get_or_raise(telegram_user_id)
+                return SettingsTarget.user(user_id=user.id)
+            case GroupSettingsTarget(telegram_chat_id=telegram_chat_id):
+                chat = await self.chat.get_or_raise(telegram_chat_id)
+                return SettingsTarget.group(chat_id=chat.id)
+            case GroupMemberSettingsTarget(telegram_chat_id=telegram_chat_id, telegram_user_id=telegram_user_id):
+                chat = await self.chat.get_or_raise(telegram_chat_id)
+                user = await self.user.get_or_raise(telegram_user_id)
+                return SettingsTarget.group_member(chat_id=chat.id, user_id=user.id)
+            case ForumTopicSettingsTarget(telegram_chat_id=telegram_chat_id, telegram_thread_id=telegram_thread_id):
+                forum_topic = await self.forum_topic.get_or_raise(telegram_chat_id, telegram_thread_id)
+                return SettingsTarget.forum_topic(forum_topic_id=forum_topic.id)
+            case ForumTopicMemberSettingsTarget(
+                telegram_chat_id=telegram_chat_id,
+                telegram_thread_id=telegram_thread_id,
+                telegram_user_id=telegram_user_id,
+            ):
+                forum_topic = await self.forum_topic.get_or_raise(telegram_chat_id, telegram_thread_id)
+                user = await self.user.get_or_raise(telegram_user_id)
+                return SettingsTarget.forum_topic_member(forum_topic_id=forum_topic.id, user_id=user.id)
+            case ChannelSettingsTarget(telegram_chat_id=telegram_chat_id):
+                chat = await self.chat.get_or_raise(telegram_chat_id)
+                return SettingsTarget.channel(chat_id=chat.id)

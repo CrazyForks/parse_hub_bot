@@ -45,6 +45,7 @@ from plugins.helpers import (
     build_caption_by_str,
     build_start_text,
     create_richtext_telegraph,
+    get_lang,
     resolve_media_info,
 )
 from repo.settings import Config
@@ -316,9 +317,8 @@ async def build_inline_results(
 
 @Client.on_inline_query(~platform_filter(False))
 async def inline_parse_tip(_: Client, inline_query: InlineQuery) -> None:
-    async with get_session() as session:
-        lang = await UserService(session, inline_query.from_user.id).get_lang()
-        _t = t_[lang]
+    lang = await get_lang(inline_query.from_user.id)
+    _t = t_[lang]
     results: list[InlineQueryResult] = [
         InlineQueryResultArticle(
             title=_t("聚合解析"),
@@ -338,7 +338,7 @@ async def call_inline_parse(cli: Client, inline_query: InlineQuery) -> None:
     logger.info(f"收到内联解析请求: query={inline_query.query}, from_user={inline_query.from_user.id}")
     raw_url = await ParseService().get_raw_url(inline_query.query)
     async with get_session() as session:
-        lang = await UserService(session, inline_query.from_user.id).get_lang()
+        lang = await UserService(session).get_lang(inline_query.from_user.id)
         config = await SettingsService(session).get_config(TelegramSettingsTarget.user(inline_query.from_user.id))
     if cached := await persistent_cache.get(raw_url):
         logger.debug("inline: 缓存命中, 构建 cached 结果")
@@ -363,7 +363,7 @@ async def inline_result_download(cli: Client, chosen_result: ChosenInlineResult)
         return
 
     async with get_session() as session:
-        lang = await UserService(session, chosen_result.from_user.id).get_lang()
+        lang = await UserService(session).get_lang(chosen_result.from_user.id)
         config = await SettingsService(session).get_config(TelegramSettingsTarget.user(chosen_result.from_user.id))
         _t = t_[lang]
     media_index = int(chosen_result.result_id.split("_")[1])

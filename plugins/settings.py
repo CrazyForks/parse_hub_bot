@@ -11,6 +11,7 @@ from pyrogram.types import InlineKeyboardMarkup as Ikm
 
 from db import get_session
 from i18n import LANG_MAP, t_
+from plugins.helpers import get_lang
 from repo.settings import Config, DefaultMode
 from services import SettingsService, TelegramSettingsTarget, UserService
 
@@ -44,8 +45,7 @@ async def select_lang(_: Client, msg: Message) -> None:
     if not msg.from_user:
         return
 
-    async with get_session() as session:
-        lang = await UserService(session, msg.from_user.id).get_lang()
+    lang = await get_lang(msg.from_user.id)
 
     ikbs = [
         Ikb(
@@ -66,15 +66,12 @@ async def selected_lang(_: Client, cq: CallbackQuery) -> None:
         return
 
     cqdata = CQData.parse(cq.data)
-    if cq.from_user.id != cqdata.uid:
-        async with get_session() as session:
-            lang = await UserService(session, cq.from_user.id).get_lang()
-        await cq.answer(t_[lang]("这不是你的操作"), show_alert=True)
+    if not await ensure_callback_owner(cq, cqdata.uid):
         return
 
     selected = cqdata.value
     async with get_session() as session:
-        user = await UserService(session, cq.from_user.id).set_language(selected)
+        user = await UserService(session).set_lang(cq.from_user.id, selected)
 
     await cq.message.edit(t_[user.language_code](f"**▎已切换为: {LANG_MAP[selected]}**"))
 
@@ -93,9 +90,8 @@ async def select_mode(_: Client, msg: Message) -> None:
         return
 
     async with get_session() as session:
-        user = await UserService(session, msg.from_user.id).ensure_user()
+        lang = await UserService(session).get_lang(msg.from_user.id)
         user_config = await SettingsService(session).get_config(TelegramSettingsTarget.user(msg.from_user.id))
-        lang = user.language_code
 
     ikbs = [
         Ikb(
@@ -115,39 +111,16 @@ async def selected_mode(_: Client, cq: CallbackQuery) -> None:
         return
 
     cqdata = CQData.parse(cq.data)
-    if cq.from_user.id != cqdata.uid:
-        async with get_session() as session:
-            lang = await UserService(session, cq.from_user.id).get_lang()
-        await cq.answer(t_[lang]("这不是你的操作"), show_alert=True)
+    if not await ensure_callback_owner(cq, cqdata.uid):
         return
 
     selected = cast(DefaultMode, cqdata.value)
     async with get_session() as session:
-        lang = await UserService(session, cq.from_user.id).get_lang()
+        lang = await UserService(session).get_lang(cq.from_user.id)
         settings = SettingsService(session)
         await settings.patch_config(target=TelegramSettingsTarget.user(cq.from_user.id), default_mode=selected)
 
     await cq.message.edit(t_[lang](f"**▎已切换为: {MODE_MAP[selected]}**"))
-
-
-@Client.on_message(filters.command("switch_auto_delete"))
-async def switch_auto_delete_url(_: Client, msg: Message) -> None:
-    if not msg.from_user:
-        return
-
-    async with get_session() as session:
-        lang = await UserService(session, msg.from_user.id).get_lang()
-        settings = SettingsService(session)
-        config = await settings.get_config(TelegramSettingsTarget.user(msg.from_user.id))
-        config = await settings.patch_config(
-            TelegramSettingsTarget.user(msg.from_user.id), auto_delete_url=not config.auto_delete_url
-        )
-    _t = t_[lang]
-    status = _t("启用") if config.auto_delete_url else _t("禁用")
-    await msg.reply_text(
-        f"{_t(f'** ▎已 {status} 自动删除分享链接消息 **')}\n"
-        f"{_t('▎**群内使用需要授予 Bot 删除消息权限**') if config.auto_delete_url else ''}"
-    )
 
 
 @Client.on_message(filters.command("switch_platform"))
@@ -156,7 +129,7 @@ async def switch_platform(_: Client, msg: Message) -> None:
         return
 
     async with get_session() as session:
-        lang = await UserService(session, msg.from_user.id).get_lang()
+        lang = await UserService(session).get_lang(msg.from_user.id)
         config = await SettingsService(session).get_config(TelegramSettingsTarget.user(msg.from_user.id))
 
     ikbs = [
@@ -177,10 +150,7 @@ async def switch_platform_callback(_: Client, cq: CallbackQuery) -> None:
         return
 
     cqdata = CQData.parse(cq.data)
-    if cq.from_user.id != cqdata.uid:
-        async with get_session() as session:
-            lang = await UserService(session, cq.from_user.id).get_lang()
-        await cq.answer(t_[lang]("这不是你的操作"), show_alert=True)
+    if not await ensure_callback_owner(cq, cqdata.uid):
         return
 
     selected = cqdata.value
@@ -245,6 +215,13 @@ def build_switches_button(uid: int, lang: str, config: Config) -> Ikm:
                     style=reply_bool_style(config.noprogress),
                 ),
             ],
+            [
+                Ikb(
+                    _t("自动删除链接消息"),
+                    callback_data=cq("auto_delete_url"),
+                    style=reply_bool_style(config.hide_source),
+                )
+            ],
         ]
     )
 
@@ -254,10 +231,10 @@ async def switches(_: Client, msg: Message) -> None:
     if not msg.from_user:
         return
     async with get_session() as session:
-        user = await UserService(session, msg.from_user.id).ensure_user()
+        lang = await UserService(session).get_lang(msg.from_user.id)
         config = await SettingsService(session).get_config(TelegramSettingsTarget.user(msg.from_user.id))
-    reply_markup = build_switches_button(msg.from_user.id, user.language_code, config)
-    await msg.reply(t_[user.language_code]("**▎功能开关**"), reply_markup=reply_markup)
+    reply_markup = build_switches_button(msg.from_user.id, lang, config)
+    await msg.reply(t_[lang]("**▎功能开关**"), reply_markup=reply_markup)
 
 
 @Client.on_callback_query(filters.regex(r"^switches"))
@@ -266,15 +243,12 @@ async def switches_callback(_: Client, cq: CallbackQuery) -> None:
         return
 
     cqdata = CQData.parse(cq.data)
-    if cq.from_user.id != cqdata.uid:
-        async with get_session() as session:
-            lang = await UserService(session, cq.from_user.id).get_lang()
-        await cq.answer(t_[lang]("这不是你的操作"), show_alert=True)
+    if not await ensure_callback_owner(cq, cqdata.uid):
         return
 
     selected = cqdata.value
     async with get_session() as session:
-        lang = await UserService(session, cq.from_user.id).get_lang()
+        lang = await UserService(session).get_lang(cq.from_user.id)
         settings = SettingsService(session)
         tst = TelegramSettingsTarget.user(cq.from_user.id)
         config = await settings.get_config(tst)
@@ -288,5 +262,18 @@ async def switches_callback(_: Client, cq: CallbackQuery) -> None:
                 config = await settings.patch_config(tst, hide_source=not config.hide_source)
             case "noprogress":
                 config = await settings.patch_config(tst, noprogress=not config.noprogress)
+            case "auto_delete_url":
+                config = await settings.patch_config(tst, auto_delete_url=not config.auto_delete_url)
 
     await cq.message.edit_reply_markup(reply_markup=build_switches_button(cq.from_user.id, lang, config))
+
+
+async def ensure_callback_owner(
+    cq: CallbackQuery,
+    owner_id: int,
+) -> bool:
+    if cq.from_user.id != owner_id:
+        lang = await get_lang(cq.from_user.id)
+        await cq.answer(t_[lang]("这不是你的操作"), show_alert=True)
+        return False
+    return True

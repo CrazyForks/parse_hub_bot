@@ -1,11 +1,52 @@
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Self
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.models.settings import Scope, Settings
+from db.models.settings import Settings, SettingsScope
 from repo.settings.migrate import migrate
-from repo.settings.schema import Config, SettingsTarget, validate_patch_scope
+from repo.settings.schema import Config
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class SettingsTarget:
+    scope: SettingsScope
+    user_id: int | None = None
+    chat_id: int | None = None
+    forum_topic_id: int | None = None
+
+    @classmethod
+    def user(cls, user_id: int) -> Self:
+        return cls(scope=SettingsScope.USER, user_id=user_id)
+
+    @classmethod
+    def group(cls, chat_id: int) -> Self:
+        return cls(scope=SettingsScope.GROUP, chat_id=chat_id)
+
+    @classmethod
+    def group_member(cls, chat_id: int, user_id: int) -> Self:
+        return cls(scope=SettingsScope.GROUP_MEMBER, chat_id=chat_id, user_id=user_id)
+
+    @classmethod
+    def forum_topic(cls, forum_topic_id: int) -> Self:
+        return cls(scope=SettingsScope.FORUM_TOPIC, forum_topic_id=forum_topic_id)
+
+    @classmethod
+    def forum_topic_member(cls, forum_topic_id: int, user_id: int) -> Self:
+        return cls(scope=SettingsScope.FORUM_TOPIC_MEMBER, forum_topic_id=forum_topic_id, user_id=user_id)
+
+    @classmethod
+    def channel(cls, chat_id: int) -> Self:
+        return cls(scope=SettingsScope.CHANNEL, chat_id=chat_id)
+
+    def dump(self) -> dict[str, int | None | SettingsScope]:
+        return {
+            "scope": self.scope,
+            "user_id": self.user_id,
+            "chat_id": self.chat_id,
+            "forum_topic_id": self.forum_topic_id,
+        }
 
 
 class SettingsRepo:
@@ -14,96 +55,48 @@ class SettingsRepo:
 
     @staticmethod
     def config_from_raw(raw: dict[str, Any] | None) -> Config:
-        config = Config.model_validate(raw) if raw is not None else None
+        config = Config.model_validate(raw) if raw else None
         return migrate(config)
 
-    @staticmethod
-    def _coerce_target(target: SettingsTarget | int) -> SettingsTarget:
-        if isinstance(target, SettingsTarget):
-            return target
-        if isinstance(target, bool) or not isinstance(target, int):
-            raise TypeError("target 必须是 SettingsTarget 或用户内部 ID。")
-        return SettingsTarget.user(target)
-
-    @staticmethod
-    def _values_for(target: SettingsTarget) -> dict[str, int | None | Scope]:
-        return {
-            "scope": target.scope,
-            "user_id": target.user_id,
-            "chat_id": target.chat_id,
-            "forum_topic_id": target.forum_topic_id,
-        }
-
-    @staticmethod
-    def _config_data(config: Config) -> dict[str, Any]:
-        return config.model_dump(mode="json")
-
-    async def get(self, target: SettingsTarget | int) -> Settings | None:
-        target = self._coerce_target(target)
-        settings = await self._session.scalar(select(Settings).filter_by(**self._values_for(target)))
+    async def get(self, target: SettingsTarget) -> Settings | None:
+        settings = await self._session.scalar(select(Settings).filter_by(**target.dump()))
         return settings
 
-    async def get_or_create(self, target: SettingsTarget | int) -> Settings:
-        target = self._coerce_target(target)
-        settings = await self.get(target)
-        if settings is not None:
-            return settings
-
+    async def add(self, target: SettingsTarget, config: Config | None = None) -> Settings:
         settings = Settings(
-            **self._values_for(target),
-            config=self._config_data(Config()),
+            **target.dump(),
+            config=_config_dump(config or Config()),
         )
         self._session.add(settings)
         await self._session.flush()
         return settings
 
-    async def get_config(self, target: SettingsTarget | int) -> Config:
-        target = self._coerce_target(target)
-        settings = await self.get_or_create(target)
-        config = self.config_from_raw(settings.config)
-        config_data = self._config_data(config)
+    async def get_config(self, target: SettingsTarget) -> Config:
+        settings = await self.get(target)
+        if not settings:
+            return Config()
+        original_raw = settings.config
+        migrated_config = self.config_from_raw(original_raw)
 
-        if settings.config != config_data:
-            await self._save_config(target, config)
+        if _config_dump(migrated_config) != original_raw:
+            await self._save_config(target, migrated_config)
 
-        return config
+        return migrated_config
 
     async def _save_config(self, target: SettingsTarget, config: Config) -> Settings:
-        settings = await self.get_or_create(target)
-        settings.config = self._config_data(config)
+        settings = await self.get(target)
+        if not settings:
+            return await self.add(target, config)
+        settings.config = _config_dump(config)
         await self._session.flush()
         return settings
 
-    async def save_config(self, target: SettingsTarget | int, config: Config) -> Settings:
-        target = self._coerce_target(target)
-        config = self.config_from_raw(self._config_data(config))
-        current = await self.get_config(target)
-        changed_fields = {
-            name for name, value in config.model_dump().items() if current.model_dump().get(name) != value
-        }
-        validate_patch_scope(target.scope, changed_fields)
-        return await self._save_config(target, config)
-
-    async def patch_config(self, target: SettingsTarget | int, **kwargs: Any) -> Config:
-        target = self._coerce_target(target)
-        validate_patch_scope(target.scope, set(kwargs))
+    async def patch_config(self, target: SettingsTarget, **kwargs: Any) -> Config:
         current = await self.get_config(target)
         config = Config.model_validate(current.model_dump() | kwargs)
         await self._save_config(target, config)
         return config
 
-    async def get_by_user_ids(self, user_ids: list[int]) -> list[Settings]:
-        if not user_ids:
-            return []
-        result = await self._session.scalars(
-            select(Settings).where(
-                Settings.scope == Scope.USER,
-                Settings.user_id.in_(user_ids),
-            )
-        )
-        return list(result)
 
-    async def save_raw(self, target: SettingsTarget | int, data: dict[str, Any]) -> Settings:
-        target = self._coerce_target(target)
-        config = self.config_from_raw(data)
-        return await self.save_config(target, config)
+def _config_dump(config: Config) -> dict[str, Any]:
+    return config.model_dump(mode="json")

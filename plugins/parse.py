@@ -148,7 +148,7 @@ async def jx(cli: Client, msg: Message) -> None:
 
     if msg.from_user:
         async with get_session() as session:
-            lang = await UserService(session, msg.from_user.id).get_lang()
+            lang = await UserService(session).get_lang(msg.from_user.id)
             user_config = await SettingsService(session).get_config(TelegramSettingsTarget.user(msg.from_user.id))
             mode = user_config.default_mode
 

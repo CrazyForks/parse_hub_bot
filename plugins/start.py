@@ -12,9 +12,9 @@ async def start(_: Client, msg: Message) -> None:
         return
 
     async with get_session() as session:
-        user = await UserService(session, msg.from_user.id).ensure_user()
+        lang = await UserService(session).get_lang(msg.from_user.id)
 
     await msg.reply(
-        build_start_text()[user.language_code],
+        build_start_text()[lang],
         link_preview_options=LinkPreviewOptions(is_disabled=True),
     )

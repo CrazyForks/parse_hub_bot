@@ -4,10 +4,7 @@ from repo.settings.schema import (
     CURRENT_SCHEMA_VERSION,
     DEFAULT_CONFIG,
     Config,
-    ConfigPatch,
     DefaultMode,
-    SettingsTarget,
-    validate_patch_scope,
 )
 
 __all__ = [
@@ -16,8 +13,5 @@ __all__ = [
     "DEFAULT_CONFIG",
     "DefaultMode",
     "Config",
-    "ConfigPatch",
-    "SettingsTarget",
-    "validate_patch_scope",
     "migrate",
 ]
