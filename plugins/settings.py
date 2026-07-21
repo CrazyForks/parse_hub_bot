@@ -11,8 +11,8 @@ from pyrogram.types import InlineKeyboardMarkup as Ikm
 
 from db import get_session
 from i18n import LANG_MAP, t_
-from repo.settings import Config, DefaultMode
-from services import SettingsService, TelegramSettingsTarget, UserService
+from repo.settings import DefaultMode, SettingsConfig
+from services import SettingsService, UserService
 
 
 @dataclass
@@ -91,7 +91,7 @@ async def select_mode(_: Client, msg: Message) -> None:
 
     async with get_session() as session:
         lang = await UserService(session).get_lang(msg.from_user.id)
-        user_config = await SettingsService(session).get_config(TelegramSettingsTarget.user(msg.from_user.id))
+        user_config = await SettingsService(session).get_config_by_user(msg.from_user.id)
 
     ikbs = [
         Ikb(
@@ -118,7 +118,7 @@ async def selected_mode(_: Client, cq: CallbackQuery) -> None:
     async with get_session() as session:
         lang = await UserService(session).get_lang(cq.from_user.id)
         settings = SettingsService(session)
-        await settings.patch_config(target=TelegramSettingsTarget.user(cq.from_user.id), default_mode=selected)
+        await settings.patch_config_by_user(cq.from_user.id, default_mode=selected)
 
     await cq.message.edit(t_[lang](f"**▎已切换为: {MODE_MAP[selected]}**"))
 
@@ -130,7 +130,7 @@ async def switch_platform(_: Client, msg: Message) -> None:
 
     async with get_session() as session:
         lang = await UserService(session).get_lang(msg.from_user.id)
-        config = await SettingsService(session).get_config(TelegramSettingsTarget.user(msg.from_user.id))
+        config = await SettingsService(session).get_config_by_user(msg.from_user.id)
 
     ikbs = [
         Ikb(
@@ -156,16 +156,14 @@ async def switch_platform_callback(_: Client, cq: CallbackQuery) -> None:
     selected = cqdata.value
     async with get_session() as session:
         settings = SettingsService(session)
-        config = await settings.get_config(TelegramSettingsTarget.user(cq.from_user.id))
+        config = await settings.get_config_by_user(cq.from_user.id)
 
         disabled_platforms = config.disabled_platforms.copy()
         if selected in disabled_platforms:
             disabled_platforms.remove(selected)
         else:
             disabled_platforms.append(selected)
-        config = await settings.patch_config(
-            TelegramSettingsTarget.user(cq.from_user.id), disabled_platforms=disabled_platforms
-        )
+        config = await settings.patch_config_by_user(cq.from_user.id, disabled_platforms=disabled_platforms)
 
     ikbs = [
         Ikb(
@@ -179,7 +177,7 @@ async def switch_platform_callback(_: Client, cq: CallbackQuery) -> None:
     await cq.message.edit_reply_markup(reply_markup)
 
 
-def build_switches_button(uid: int, lang: str, config: Config) -> Ikm:
+def build_switches_button(uid: int, lang: str, config: SettingsConfig) -> Ikm:
     key = "switches"
     _t = t_[lang]
 
@@ -232,7 +230,7 @@ async def switches(_: Client, msg: Message) -> None:
         return
     async with get_session() as session:
         lang = await UserService(session).get_lang(msg.from_user.id)
-        config = await SettingsService(session).get_config(TelegramSettingsTarget.user(msg.from_user.id))
+        config = await SettingsService(session).get_config_by_user(msg.from_user.id)
     reply_markup = build_switches_button(msg.from_user.id, lang, config)
     await msg.reply(t_[lang]("**▎功能开关**"), reply_markup=reply_markup)
 
@@ -250,20 +248,23 @@ async def switches_callback(_: Client, cq: CallbackQuery) -> None:
     async with get_session() as session:
         lang = await UserService(session).get_lang(cq.from_user.id)
         settings = SettingsService(session)
-        tst = TelegramSettingsTarget.user(cq.from_user.id)
-        config = await settings.get_config(tst)
+        config = await settings.get_config_by_user(cq.from_user.id)
 
         match selected:
             case "enable_inline_raw_url":
-                config = await settings.patch_config(tst, enable_inline_raw_url=not config.enable_inline_raw_url)
+                config = await settings.patch_config_by_user(
+                    cq.from_user.id, enable_inline_raw_url=not config.enable_inline_raw_url
+                )
             case "keep_error_log":
-                config = await settings.patch_config(tst, keep_error_log=not config.keep_error_log)
+                config = await settings.patch_config_by_user(cq.from_user.id, keep_error_log=not config.keep_error_log)
             case "hide_source":
-                config = await settings.patch_config(tst, hide_source=not config.hide_source)
+                config = await settings.patch_config_by_user(cq.from_user.id, hide_source=not config.hide_source)
             case "noprogress":
-                config = await settings.patch_config(tst, noprogress=not config.noprogress)
+                config = await settings.patch_config_by_user(cq.from_user.id, noprogress=not config.noprogress)
             case "auto_delete_url":
-                config = await settings.patch_config(tst, auto_delete_url=not config.auto_delete_url)
+                config = await settings.patch_config_by_user(
+                    cq.from_user.id, auto_delete_url=not config.auto_delete_url
+                )
 
     await cq.message.edit_reply_markup(reply_markup=build_switches_button(cq.from_user.id, lang, config))
 

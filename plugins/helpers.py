@@ -176,4 +176,3 @@ def get_supported_platforms() -> str:
         text.append(f"**{i['name']}** __({'__, __'.join(i['supported_types'])})__")
     text.sort(reverse=True)
     return "\n".join(text)
-

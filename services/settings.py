@@ -4,7 +4,7 @@ from typing import Literal, TypedDict, Unpack
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models.settings import SettingsScope
-from repo.settings import Config, DefaultMode, SettingsRepo
+from repo.settings import DefaultMode, SettingsConfig, SettingsRepo
 from repo.settings.repo import SettingsTarget
 from services.chat import ChatService
 from services.forum_topic import ForumTopicService
@@ -71,41 +71,6 @@ class ConfigPatch(TypedDict, total=False):
     noprogress: bool
 
 
-class TelegramSettingsTarget:
-    @staticmethod
-    def user(telegram_user_id: int) -> UserSettingsTarget:
-        return UserSettingsTarget(telegram_user_id=telegram_user_id)
-
-    @staticmethod
-    def group(telegram_chat_id: int) -> GroupSettingsTarget:
-        return GroupSettingsTarget(telegram_chat_id=telegram_chat_id)
-
-    @staticmethod
-    def group_member(telegram_user_id: int, telegram_chat_id: int) -> GroupMemberSettingsTarget:
-        return GroupMemberSettingsTarget(
-            telegram_user_id=telegram_user_id,
-            telegram_chat_id=telegram_chat_id,
-        )
-
-    @staticmethod
-    def forum_topic(telegram_chat_id: int, telegram_thread_id: int) -> ForumTopicSettingsTarget:
-        return ForumTopicSettingsTarget(telegram_chat_id=telegram_chat_id, telegram_thread_id=telegram_thread_id)
-
-    @staticmethod
-    def forum_topic_member(
-        telegram_user_id: int, telegram_chat_id: int, telegram_thread_id: int
-    ) -> ForumTopicMemberSettingsTarget:
-        return ForumTopicMemberSettingsTarget(
-            telegram_user_id=telegram_user_id,
-            telegram_chat_id=telegram_chat_id,
-            telegram_thread_id=telegram_thread_id,
-        )
-
-    @staticmethod
-    def channel(telegram_chat_id: int) -> ChannelSettingsTarget:
-        return ChannelSettingsTarget(telegram_chat_id=telegram_chat_id)
-
-
 class SettingsService:
     def __init__(self, session: AsyncSession) -> None:
         self.user = UserService(session)
@@ -113,35 +78,114 @@ class SettingsService:
         self.forum_topic = ForumTopicService(session)
         self.settings = SettingsRepo(session)
 
-    async def get_config(self, target: AnySettingsTarget) -> Config:
-        return await self.settings.get_config(await self._resolve(target))
+    async def get_config(self, target: AnySettingsTarget) -> SettingsConfig:
+        return await self.settings.get_current_config(await self._resolve(target))
 
-    async def patch_config(self, target: AnySettingsTarget, **kwargs: Unpack[ConfigPatch]) -> Config:
+    async def get_config_by_user(self, telegram_user_id: int) -> SettingsConfig:
+        return await self.get_config(UserSettingsTarget(telegram_user_id=telegram_user_id))
+
+    async def get_config_by_group(self, telegram_chat_id: int) -> SettingsConfig:
+        return await self.get_config(GroupSettingsTarget(telegram_chat_id=telegram_chat_id))
+
+    async def get_config_by_group_member(self, telegram_chat_id: int, telegram_user_id: int) -> SettingsConfig:
+        return await self.get_config(
+            GroupMemberSettingsTarget(telegram_chat_id=telegram_chat_id, telegram_user_id=telegram_user_id)
+        )
+
+    async def get_config_by_forum_topic(self, telegram_chat_id: int, telegram_thread_id: int) -> SettingsConfig:
+        return await self.get_config(
+            ForumTopicSettingsTarget(telegram_chat_id=telegram_chat_id, telegram_thread_id=telegram_thread_id)
+        )
+
+    async def get_config_by_forum_topic_member(
+        self, telegram_chat_id: int, telegram_thread_id: int, telegram_user_id: int
+    ) -> SettingsConfig:
+        return await self.get_config(
+            ForumTopicMemberSettingsTarget(
+                telegram_chat_id=telegram_chat_id,
+                telegram_thread_id=telegram_thread_id,
+                telegram_user_id=telegram_user_id,
+            )
+        )
+
+    async def get_config_by_channel(self, telegram_chat_id: int) -> SettingsConfig:
+        return await self.get_config(ChannelSettingsTarget(telegram_chat_id=telegram_chat_id))
+
+    async def patch_config(self, target: AnySettingsTarget, **kwargs: Unpack[ConfigPatch]) -> SettingsConfig:
         return await self.settings.patch_config(await self._resolve(target), **kwargs)
+
+    async def patch_config_by_user(self, telegram_user_id: int, **kwargs: Unpack[ConfigPatch]) -> SettingsConfig:
+        return await self.settings.patch_config(
+            await self._resolve(UserSettingsTarget(telegram_user_id=telegram_user_id)), **kwargs
+        )
+
+    async def patch_config_by_group(self, telegram_chat_id: int, **kwargs: Unpack[ConfigPatch]) -> SettingsConfig:
+        return await self.settings.patch_config(
+            await self._resolve(GroupSettingsTarget(telegram_chat_id=telegram_chat_id)), **kwargs
+        )
+
+    async def patch_config_by_group_member(
+        self, telegram_chat_id: int, telegram_user_id: int, **kwargs: Unpack[ConfigPatch]
+    ) -> SettingsConfig:
+        return await self.settings.patch_config(
+            await self._resolve(
+                GroupMemberSettingsTarget(telegram_chat_id=telegram_chat_id, telegram_user_id=telegram_user_id)
+            ),
+            **kwargs,
+        )
+
+    async def patch_config_by_forum_topic(
+        self, telegram_chat_id: int, telegram_thread_id: int, **kwargs: Unpack[ConfigPatch]
+    ) -> SettingsConfig:
+        return await self.settings.patch_config(
+            await self._resolve(
+                ForumTopicSettingsTarget(telegram_chat_id=telegram_chat_id, telegram_thread_id=telegram_thread_id)
+            ),
+            **kwargs,
+        )
+
+    async def patch_config_by_forum_topic_member(
+        self, telegram_chat_id: int, telegram_thread_id: int, telegram_user_id: int, **kwargs: Unpack[ConfigPatch]
+    ) -> SettingsConfig:
+        return await self.settings.patch_config(
+            await self._resolve(
+                ForumTopicMemberSettingsTarget(
+                    telegram_chat_id=telegram_chat_id,
+                    telegram_thread_id=telegram_thread_id,
+                    telegram_user_id=telegram_user_id,
+                )
+            ),
+            **kwargs,
+        )
+
+    async def patch_config_by_channel(self, telegram_chat_id: int, **kwargs: Unpack[ConfigPatch]) -> SettingsConfig:
+        return await self.settings.patch_config(
+            await self._resolve(ChannelSettingsTarget(telegram_chat_id=telegram_chat_id)), **kwargs
+        )
 
     async def _resolve(self, target: AnySettingsTarget) -> SettingsTarget:
         match target:
             case UserSettingsTarget(telegram_user_id=telegram_user_id):
-                user = await self.user.get_or_raise(telegram_user_id)
+                user = await self.user.ensure(telegram_user_id)
                 return SettingsTarget.user(user_id=user.id)
             case GroupSettingsTarget(telegram_chat_id=telegram_chat_id):
-                chat = await self.chat.get_or_raise(telegram_chat_id)
+                chat = await self.chat.ensure_group(telegram_chat_id)
                 return SettingsTarget.group(chat_id=chat.id)
             case GroupMemberSettingsTarget(telegram_chat_id=telegram_chat_id, telegram_user_id=telegram_user_id):
-                chat = await self.chat.get_or_raise(telegram_chat_id)
-                user = await self.user.get_or_raise(telegram_user_id)
+                chat = await self.chat.ensure_group(telegram_chat_id)
+                user = await self.user.ensure(telegram_user_id)
                 return SettingsTarget.group_member(chat_id=chat.id, user_id=user.id)
             case ForumTopicSettingsTarget(telegram_chat_id=telegram_chat_id, telegram_thread_id=telegram_thread_id):
-                forum_topic = await self.forum_topic.get_or_raise(telegram_chat_id, telegram_thread_id)
+                forum_topic = await self.forum_topic.ensure(telegram_chat_id, telegram_thread_id)
                 return SettingsTarget.forum_topic(forum_topic_id=forum_topic.id)
             case ForumTopicMemberSettingsTarget(
                 telegram_chat_id=telegram_chat_id,
                 telegram_thread_id=telegram_thread_id,
                 telegram_user_id=telegram_user_id,
             ):
-                forum_topic = await self.forum_topic.get_or_raise(telegram_chat_id, telegram_thread_id)
-                user = await self.user.get_or_raise(telegram_user_id)
+                forum_topic = await self.forum_topic.ensure(telegram_chat_id, telegram_thread_id)
+                user = await self.user.ensure(telegram_user_id)
                 return SettingsTarget.forum_topic_member(forum_topic_id=forum_topic.id, user_id=user.id)
             case ChannelSettingsTarget(telegram_chat_id=telegram_chat_id):
-                chat = await self.chat.get_or_raise(telegram_chat_id)
+                chat = await self.chat.ensure_channel(telegram_chat_id)
                 return SettingsTarget.channel(chat_id=chat.id)

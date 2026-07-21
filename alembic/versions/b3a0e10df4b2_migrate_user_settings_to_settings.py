@@ -11,6 +11,7 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 
 from alembic import op
+from repo.settings import DEFAULT_CONFIG
 
 # revision identifiers, used by Alembic.
 revision: str = "b3a0e10df4b2"
@@ -65,19 +66,26 @@ def upgrade() -> None:
         .all()
     )
 
-    rows_to_insert = [
-        {
-            "scope": "user",
-            "user_id": row["user_id"],
-            "chat_id": None,
-            "forum_topic_id": None,
-            "config": row["settings_json"],
-            "lock_version": row["lock_version"],
-            "created_at": row["created_at"],
-            "updated_at": row["updated_at"],
+    rows_to_insert = []
+    for row in legacy_rows:
+        config = dict(row["settings_json"] or {})
+        config.pop("schema_version")
+        config = {
+            key: value for key, value in config.items() if value != DEFAULT_CONFIG.model_dump(mode="json").get(key)
         }
-        for row in legacy_rows
-    ]
+        rows_to_insert.append(
+            {
+                "scope": "user",
+                "user_id": row["user_id"],
+                "chat_id": None,
+                "forum_topic_id": None,
+                "config": config,
+                "schema_version": 1,  # 大重构, 版本统一重置为 1
+                "lock_version": row["lock_version"],
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+            }
+        )
     if rows_to_insert:
         bind.execute(settings.insert(), rows_to_insert)
 

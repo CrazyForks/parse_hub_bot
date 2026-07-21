@@ -23,6 +23,7 @@ class BotSettings(BaseSettings):
     api_hash: str = Field(...)
     bot_proxy: dict | None = Field(default=None)
     data_path: Path = Field(default=Path("data"))
+    language: str = Field(default="zh-hans")
     cache_max_entries: int = Field(default=30000, ge=0, description="缓存最大条数, 0 为不限制")
     cache_disabled: bool = Field(default=False, description="禁用缓存")
 

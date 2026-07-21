@@ -47,8 +47,8 @@ from plugins.helpers import (
     create_richtext_telegraph,
     resolve_media_info,
 )
-from repo.settings import Config
-from services import ParseService, SettingsService, TelegramSettingsTarget, UserService
+from repo.settings import SettingsConfig
+from services import ParseService, SettingsService, UserService
 from services.cache import CacheEntry, CacheMediaType, parse_cache, persistent_cache
 from services.pipeline import ParsePipeline, StatusReporter
 from utils.helpers import to_list, with_request_id
@@ -62,7 +62,13 @@ class InlineStatusReporter(StatusReporter):
     """基于 inline_message_id 的状态报告器"""
 
     def __init__(
-        self, cli: Client, inline_message_id: str, caption: str = "", *, _t: PreLocaleSelector, user_config: Config
+        self,
+        cli: Client,
+        inline_message_id: str,
+        caption: str = "",
+        *,
+        _t: PreLocaleSelector,
+        user_config: SettingsConfig,
     ):
         self._cli = cli
         self._mid = inline_message_id
@@ -113,7 +119,9 @@ class InlineStatusReporter(StatusReporter):
         pass
 
 
-def build_cached_inline_results(entry: CacheEntry, raw_url: str, lang: str, config: Config) -> list[InlineQueryResult]:
+def build_cached_inline_results(
+    entry: CacheEntry, raw_url: str, lang: str, config: SettingsConfig
+) -> list[InlineQueryResult]:
     """有 file_id 缓存时，构建 cached 类型的 inline 结果（Telegram 服务端直发）"""
     _t = t_[lang]
 
@@ -207,7 +215,7 @@ def build_cached_inline_results(entry: CacheEntry, raw_url: str, lang: str, conf
 
 
 async def build_inline_results(
-    parse_result: AnyParseResult, cli: Client, lang: str, config: Config
+    parse_result: AnyParseResult, cli: Client, lang: str, config: SettingsConfig
 ) -> list[InlineQueryResult]:
     """根据解析结果构建内联查询结果列表"""
     logger.debug(f"构建 inline 结果: type={parse_result.type}, title={parse_result.title}")
@@ -339,7 +347,7 @@ async def call_inline_parse(cli: Client, inline_query: InlineQuery) -> None:
     raw_url = await ParseService().get_raw_url(inline_query.query)
     async with get_session() as session:
         lang = await UserService(session).get_lang(inline_query.from_user.id)
-        config = await SettingsService(session).get_config(TelegramSettingsTarget.user(inline_query.from_user.id))
+        config = await SettingsService(session).get_config_by_user(inline_query.from_user.id)
     if cached := await persistent_cache.get(raw_url):
         logger.debug("inline: 缓存命中, 构建 cached 结果")
         results = build_cached_inline_results(cached, raw_url, lang, config)
@@ -364,7 +372,7 @@ async def inline_result_download(cli: Client, chosen_result: ChosenInlineResult)
 
     async with get_session() as session:
         lang = await UserService(session).get_lang(chosen_result.from_user.id)
-        config = await SettingsService(session).get_config(TelegramSettingsTarget.user(chosen_result.from_user.id))
+        config = await SettingsService(session).get_config_by_user(chosen_result.from_user.id)
         _t = t_[lang]
     media_index = int(chosen_result.result_id.split("_")[1])
     inline_message_id = chosen_result.inline_message_id

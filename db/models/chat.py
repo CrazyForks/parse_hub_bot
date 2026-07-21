@@ -16,7 +16,6 @@ if TYPE_CHECKING:
 
 class ChatType(enum.Enum):
     GROUP = "group"
-    SUPERGROUP = "supergroup"
     CHANNEL = "channel"
 
 

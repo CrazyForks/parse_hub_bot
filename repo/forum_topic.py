@@ -10,7 +10,13 @@ class ForumTopicRepo:
         self._session = session
         self._chats = ChatRepo(session)
 
-    async def get_by_chat_id_and_tg_thread_id(self, chat_id: int, telegram_thread_id: int) -> ForumTopic | None:
+    async def add(self, chat_id: int, telegram_thread_id: int) -> ForumTopic:
+        forum_topic = ForumTopic(chat_id=chat_id, telegram_thread_id=telegram_thread_id)
+        self._session.add(forum_topic)
+        await self._session.flush()
+        return forum_topic
+
+    async def get(self, chat_id: int, telegram_thread_id: int) -> ForumTopic | None:
         topic = await self._session.scalar(
             select(ForumTopic).where(
                 ForumTopic.chat_id == chat_id,

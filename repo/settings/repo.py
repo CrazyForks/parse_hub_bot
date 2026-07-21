@@ -5,8 +5,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models.settings import Settings, SettingsScope
-from repo.settings.migrate import migrate
-from repo.settings.schema import Config
+from log import logger
+from repo.settings.migrations import REGISTRY
+from repo.settings.schema import CURRENT_SCHEMA_VERSION, DEFAULT_CONFIG, SettingsConfig
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -53,50 +54,100 @@ class SettingsRepo:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    @staticmethod
-    def config_from_raw(raw: dict[str, Any] | None) -> Config:
-        config = Config.model_validate(raw) if raw else None
-        return migrate(config)
-
     async def get(self, target: SettingsTarget) -> Settings | None:
         settings = await self._session.scalar(select(Settings).filter_by(**target.dump()))
         return settings
 
-    async def add(self, target: SettingsTarget, config: Config | None = None) -> Settings:
+    async def add(self, target: SettingsTarget, config: SettingsConfig | None = None) -> Settings:
         settings = Settings(
             **target.dump(),
-            config=_config_dump(config or Config()),
+            config=_config_to_patch(config or DEFAULT_CONFIG),
         )
         self._session.add(settings)
         await self._session.flush()
         return settings
 
-    async def get_config(self, target: SettingsTarget) -> Config:
+    async def get_raw_config(self, target: SettingsTarget) -> dict:
+        """获取 config patch"""
+        settings = await self.get(target)
+        return settings.config if settings else {}
+
+    async def get_current_config(self, target: SettingsTarget) -> SettingsConfig:
+        """获取最新完整配置"""
         settings = await self.get(target)
         if not settings:
-            return Config()
+            return DEFAULT_CONFIG
         original_raw = settings.config
-        migrated_config = self.config_from_raw(original_raw)
 
-        if _config_dump(migrated_config) != original_raw:
+        if not (migrated := await self.migrate(target)):
+            return DEFAULT_CONFIG
+        migrated_config = SettingsConfig.model_validate(migrated.config)
+
+        if migrated.config != original_raw:
             await self._save_config(target, migrated_config)
 
         return migrated_config
 
-    async def _save_config(self, target: SettingsTarget, config: Config) -> Settings:
+    async def _save_config(self, target: SettingsTarget, config: SettingsConfig) -> Settings:
         settings = await self.get(target)
         if not settings:
             return await self.add(target, config)
-        settings.config = _config_dump(config)
+        settings.config = _config_to_patch(config)
         await self._session.flush()
         return settings
 
-    async def patch_config(self, target: SettingsTarget, **kwargs: Any) -> Config:
-        current = await self.get_config(target)
-        config = Config.model_validate(current.model_dump() | kwargs)
+    async def patch_config(self, target: SettingsTarget, **kwargs: Any) -> SettingsConfig:
+        current = await self.get_current_config(target)
+        config = SettingsConfig.model_validate(current.model_dump() | kwargs)
         await self._save_config(target, config)
         return config
 
+    async def migrate(self, target: SettingsTarget) -> Settings | None:
+        """对 config patch 进行迁移"""
+        log = logger.bind(name="SettingsMigration")
 
-def _config_dump(config: Config) -> dict[str, Any]:
+        settings = await self.get(target)
+        if not settings:
+            return None
+        if not settings.config:
+            return None
+
+        schema_version = settings.schema_version
+
+        if schema_version == CURRENT_SCHEMA_VERSION:
+            return settings
+
+        if schema_version > CURRENT_SCHEMA_VERSION:
+            raise ValueError(
+                f"未知的 settings schema_version={schema_version}，当前最大版本为 {CURRENT_SCHEMA_VERSION}。"
+            )
+
+        log.debug(f"开始迁移设置配置: schema_version={schema_version}, current={CURRENT_SCHEMA_VERSION}")
+
+        while schema_version < CURRENT_SCHEMA_VERSION:
+            fn = REGISTRY.get(schema_version)
+            if fn is None:
+                raise ValueError(
+                    f"缺少设置配置迁移函数：v{schema_version} → v{schema_version + 1}，"
+                    f"请在 migrations/ 下新增文件并注册到 REGISTRY。"
+                )
+
+            log.debug(f"执行设置配置迁移: v{schema_version} -> v{schema_version + 1}")
+            config = fn(settings.config)
+            settings.config = config
+            settings.schema_version = schema_version + 1
+            await self._session.flush()
+
+        log.debug(f"设置配置迁移完成: schema_version={schema_version}")
+        return settings
+
+
+def _config_dump(config: SettingsConfig) -> dict[str, Any]:
     return config.model_dump(mode="json")
+
+
+def _config_to_patch(config: SettingsConfig, base: SettingsConfig = DEFAULT_CONFIG) -> dict[str, Any]:
+    config_data = config.model_dump(mode="json")
+    base_data = base.model_dump(mode="json")
+
+    return {key: value for key, value in config_data.items() if value != base_data.get(key)}

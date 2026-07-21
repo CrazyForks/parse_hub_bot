@@ -1,39 +1,75 @@
-from dataclasses import dataclass
+from enum import Enum
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from db.models.settings import SettingsScope
 
-CURRENT_SCHEMA_VERSION = 3
+CURRENT_SCHEMA_VERSION = 1
 
 DefaultMode = Literal["preview", "raw", "zip"]
 
 
-@dataclass(frozen=True)
-class ScopePolicy:
-    allowed_scopes: frozenset[SettingsScope]
+class MergeStrategy(Enum):
+    PREFERENCE = "preference"
+    POLICY = "policy"
+    UNION = "union"
+    STRICT = "strict"
 
 
-ALL_SCOPES = frozenset(SettingsScope)
+class ConfigMetadata:
+    def __init__(self, scopes: frozenset[SettingsScope], merge_strategy: MergeStrategy = MergeStrategy.PREFERENCE):
+        self.scopes = frozenset([scopes]) if isinstance(scopes, SettingsScope) else scopes
+        self.merge_strategy = merge_strategy
 
 
-class Config(BaseModel):
+class SettingsConfig(BaseModel):
     model_config = ConfigDict(extra="allow")  # 保留旧字段
 
-    schema_version: Annotated[int, ScopePolicy(ALL_SCOPES), Field(ge=1, frozen=True)] = CURRENT_SCHEMA_VERSION
-    default_mode: Annotated[DefaultMode, ScopePolicy(ALL_SCOPES), Field(description="默认解析模式")] = "preview"
-    auto_delete_url: Annotated[bool, ScopePolicy(ALL_SCOPES), Field(description="解析完成后自动删除分享链接")] = False
-    disabled_platforms: Annotated[list[str], ScopePolicy(ALL_SCOPES), Field(description="禁用的平台")] = []
-    enable_inline_raw_url: Annotated[
-        bool, ScopePolicy(frozenset([SettingsScope.USER])), Field(description="启用内联模式的发送原始 URL 功能")
+    default_mode: Annotated[
+        DefaultMode,
+        Field(description="默认解析模式"),
+        ConfigMetadata(frozenset(SettingsScope), MergeStrategy.PREFERENCE),
+    ] = "preview"
+
+    auto_delete_url: Annotated[
+        bool,
+        Field(description="解析完成后自动删除分享链接"),
+        ConfigMetadata(frozenset(SettingsScope), MergeStrategy.PREFERENCE),
     ] = False
-    keep_error_log: Annotated[bool, ScopePolicy(ALL_SCOPES), Field(description="保留错误日志")] = False
-    hide_source: Annotated[bool, ScopePolicy(ALL_SCOPES), Field(description="隐藏底部 Source 超链接")] = False
-    noprogress: Annotated[bool, ScopePolicy(ALL_SCOPES), Field(description="禁用解析进度, 直接发送结果")] = False
+
+    disabled_platforms: Annotated[
+        list[str],
+        Field(description="禁用的平台"),
+        ConfigMetadata(frozenset(SettingsScope), MergeStrategy.POLICY),
+    ] = []
+
+    enable_inline_raw_url: Annotated[
+        bool,
+        Field(description="启用内联模式的发送原始 URL 功能"),
+        ConfigMetadata(frozenset([SettingsScope.USER]), MergeStrategy.STRICT),
+    ] = False
+
+    keep_error_log: Annotated[
+        bool,
+        Field(description="保留错误日志"),
+        ConfigMetadata(frozenset(SettingsScope), MergeStrategy.PREFERENCE),
+    ] = False
+
+    hide_source: Annotated[
+        bool,
+        Field(description="隐藏底部 Source 超链接"),
+        ConfigMetadata(frozenset(SettingsScope), MergeStrategy.PREFERENCE),
+    ] = False
+
+    noprogress: Annotated[
+        bool,
+        Field(description="禁用解析进度, 直接发送结果"),
+        ConfigMetadata(frozenset(SettingsScope), MergeStrategy.POLICY),
+    ] = False
 
     def __str__(self) -> str:
         return self.model_dump_json(indent=4, ensure_ascii=True)
 
 
-DEFAULT_CONFIG = Config()
+DEFAULT_CONFIG = SettingsConfig()
