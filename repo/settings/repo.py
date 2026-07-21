@@ -109,8 +109,6 @@ class SettingsRepo:
         settings = await self.get(target)
         if not settings:
             return None
-        if not settings.config:
-            return None
 
         schema_version = settings.schema_version
 
@@ -140,10 +138,6 @@ class SettingsRepo:
 
         log.debug(f"设置配置迁移完成: schema_version={schema_version}")
         return settings
-
-
-def _config_dump(config: SettingsConfig) -> dict[str, Any]:
-    return config.model_dump(mode="json")
 
 
 def _config_to_patch(config: SettingsConfig, base: SettingsConfig = DEFAULT_CONFIG) -> dict[str, Any]:

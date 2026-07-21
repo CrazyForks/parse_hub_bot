@@ -1,11 +1,12 @@
 from dataclasses import dataclass
-from typing import Literal, TypedDict, Unpack
+from typing import Any, Literal, TypedDict, Unpack
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models.settings import SettingsScope
 from repo.settings import DefaultMode, SettingsConfig, SettingsRepo
 from repo.settings.repo import SettingsTarget
+from repo.settings.schema import DEFAULT_CONFIG, ConfigMetadata, MergeStrategy
 from services.chat import ChatService
 from services.forum_topic import ForumTopicService
 from services.user import UserService
@@ -79,7 +80,17 @@ class SettingsService:
         self.settings = SettingsRepo(session)
 
     async def get_config(self, target: AnySettingsTarget) -> SettingsConfig:
-        return await self.settings.get_current_config(await self._resolve(target))
+        return await self.get_effective_config(target)
+
+    async def get_effective_config(self, target: AnySettingsTarget) -> SettingsConfig:
+        chain = await self._resolve_config_chain(target)
+
+        scoped_patches = [
+            (settings_target.scope, await self.settings.get_raw_config(settings_target)) for settings_target in chain
+        ]
+
+        merged_patch = _merge_config_patches(scoped_patches)
+        return _hydrate_config(merged_patch)
 
     async def get_config_by_user(self, telegram_user_id: int) -> SettingsConfig:
         return await self.get_config(UserSettingsTarget(telegram_user_id=telegram_user_id))
@@ -189,3 +200,93 @@ class SettingsService:
             case ChannelSettingsTarget(telegram_chat_id=telegram_chat_id):
                 chat = await self.chat.ensure_channel(telegram_chat_id)
                 return SettingsTarget.channel(chat_id=chat.id)
+
+    async def _resolve_config_chain(self, target: AnySettingsTarget) -> list[SettingsTarget]:
+        match target:
+            case UserSettingsTarget(telegram_user_id=telegram_user_id):
+                user = await self.user.ensure(telegram_user_id)
+                return [SettingsTarget.user(user_id=user.id)]
+
+            case GroupSettingsTarget(telegram_chat_id=telegram_chat_id):
+                chat = await self.chat.ensure_group(telegram_chat_id)
+                return [SettingsTarget.group(chat_id=chat.id)]
+
+            case GroupMemberSettingsTarget(telegram_chat_id=telegram_chat_id, telegram_user_id=telegram_user_id):
+                chat = await self.chat.ensure_group(telegram_chat_id)
+                user = await self.user.ensure(telegram_user_id)
+                return [
+                    SettingsTarget.group_member(chat_id=chat.id, user_id=user.id),
+                    SettingsTarget.group(chat_id=chat.id),
+                    SettingsTarget.user(user_id=user.id),
+                ]
+
+            case ForumTopicSettingsTarget(telegram_chat_id=telegram_chat_id, telegram_thread_id=telegram_thread_id):
+                chat = await self.chat.ensure_group(telegram_chat_id)
+                forum_topic = await self.forum_topic.ensure(telegram_chat_id, telegram_thread_id)
+                return [
+                    SettingsTarget.forum_topic(forum_topic_id=forum_topic.id),
+                    SettingsTarget.group(chat_id=chat.id),
+                ]
+
+            case ForumTopicMemberSettingsTarget(
+                telegram_chat_id=telegram_chat_id,
+                telegram_thread_id=telegram_thread_id,
+                telegram_user_id=telegram_user_id,
+            ):
+                chat = await self.chat.ensure_group(telegram_chat_id)
+                forum_topic = await self.forum_topic.ensure(telegram_chat_id, telegram_thread_id)
+                user = await self.user.ensure(telegram_user_id)
+                return [
+                    SettingsTarget.forum_topic_member(forum_topic_id=forum_topic.id, user_id=user.id),
+                    SettingsTarget.forum_topic(forum_topic_id=forum_topic.id),
+                    SettingsTarget.group_member(chat_id=chat.id, user_id=user.id),
+                    SettingsTarget.group(chat_id=chat.id),
+                    SettingsTarget.user(user_id=user.id),
+                ]
+
+            case ChannelSettingsTarget(telegram_chat_id=telegram_chat_id):
+                chat = await self.chat.ensure_channel(telegram_chat_id)
+                return [SettingsTarget.channel(chat_id=chat.id)]
+
+
+def _get_config_metadata(field_name: str) -> ConfigMetadata:
+    field = SettingsConfig.model_fields[field_name]
+    for metadata in field.metadata:
+        if isinstance(metadata, ConfigMetadata):
+            return metadata
+    raise RuntimeError(f"配置字段 {field_name} 缺少 ConfigMetadata")
+
+
+def _merge_config_patches(scoped_patches: list[tuple[SettingsScope, dict[str, Any]]]) -> dict[str, Any]:
+    merged: dict[str, Any] = {}
+
+    for field_name in SettingsConfig.model_fields:
+        metadata = _get_config_metadata(field_name)
+
+        values = [
+            value
+            for scope, patch in scoped_patches
+            if scope in metadata.scopes and field_name in patch
+            for value in [patch[field_name]]
+        ]
+
+        if not values:
+            continue
+
+        match metadata.merge_strategy:
+            case MergeStrategy.UNION:
+                result = []
+                for value in values:
+                    for item in value:
+                        if item not in result:
+                            result.append(item)
+                merged[field_name] = result
+
+            case MergeStrategy.POLICY | MergeStrategy.PREFERENCE | MergeStrategy.STRICT:
+                merged[field_name] = values[0]
+
+    return merged
+
+
+def _hydrate_config(config_patch: dict[str, Any]) -> SettingsConfig:
+    return SettingsConfig.model_validate(DEFAULT_CONFIG.model_dump(mode="json") | config_patch)
