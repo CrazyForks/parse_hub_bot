@@ -8,7 +8,7 @@ from db import get_session
 from i18n import t_
 from plugins.helpers import format_label
 from plugins.settings.models import BOOL_SWITCH_MAP, CfgAction, CfgCQData, CfgPage, SettingsViewModel
-from plugins.settings.render import build_cfg_markup
+from plugins.settings.render import build_cfg_markup, cfg_page_label
 from plugins.settings.target import (
     build_cfg_target_options,
     ensure_cfg_field,
@@ -46,7 +46,7 @@ async def cfg(cli: Client, msg: Message) -> None:
             return
         async with get_session() as session:
             vm = await build_cfg_vm(SettingsService(session), _t, target, "频道配置")
-        await msg.reply(format_label(_t("配置面板 - 频道配置")), reply_markup=build_cfg_markup(_t, vm))
+        await msg.reply(format_label(build_cfg_title(_t, vm.target_label)), reply_markup=build_cfg_markup(_t, vm))
         return
 
     options = await build_cfg_target_options(cli, msg, _t)
@@ -57,7 +57,7 @@ async def cfg(cli: Client, msg: Message) -> None:
         option = options[0]
         async with get_session() as session:
             vm = await build_cfg_vm(SettingsService(session), _t, option.target, option.label)
-        await msg.reply(format_label(_t(f"配置面板 - {option.label}")), reply_markup=build_cfg_markup(_t, vm))
+        await msg.reply(format_label(build_cfg_title(_t, vm.target_label)), reply_markup=build_cfg_markup(_t, vm))
         return
 
     vm = SettingsViewModel(
@@ -134,7 +134,8 @@ async def cfg_callback(cli: Client, cq: CallbackQuery) -> None:
         else CfgPage.MAIN
     )
     await cq.message.edit(
-        format_label(t_[lang](f"配置面板 - {vm.target_label}")), reply_markup=build_cfg_markup(_t, vm, page)
+        format_label(build_cfg_title(_t, vm.target_label, page)),
+        reply_markup=build_cfg_markup(_t, vm, page),
     )
 
 
@@ -153,7 +154,7 @@ async def finish_cfg_panel(cli: Client, cq: CallbackQuery, _t: PreLocaleSelector
         await delete_cfg_messages(cq.message)
         return
 
-    await cq.message.edit(format_label(_t(f"配置面板 - {label} - 完成")), reply_markup=None)
+    await cq.message.edit(format_label(build_cfg_title(_t, label, suffix=_t("完成"))), reply_markup=None)
 
 
 async def can_delete_cfg_messages(cli: Client, cq: CallbackQuery) -> bool:
@@ -201,6 +202,23 @@ def get_cfg_target_label(_t: PreLocaleSelector, target: AnySettingsTarget) -> st
         case ChannelSettingsTarget():
             label = _t("频道配置")
     return str(label)
+
+
+def build_cfg_title(
+    _t: PreLocaleSelector,
+    target_label: str | None,
+    page: CfgPage = CfgPage.MAIN,
+    *,
+    suffix: str | None = None,
+) -> str:
+    parts = [_t("配置面板")]
+    if target_label:
+        parts.append(target_label)
+    if page_label := cfg_page_label(_t, page):
+        parts.append(page_label)
+    if suffix:
+        parts.append(suffix)
+    return " - ".join(parts)
 
 
 async def build_cfg_vm(

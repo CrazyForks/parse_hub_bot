@@ -66,7 +66,7 @@ def build_cfg_main_markup(_t: PreLocaleSelector, vm: SettingsViewModel) -> Ikm:
         rows.append(
             [
                 Ikb(
-                    _t("平台管理"),
+                    cfg_page_label(_t, CfgPage.PLATFORM),
                     callback_data=cfg_callback_data(CfgAction.OPEN_PAGE, CfgPage.PLATFORM.value, vm.target),
                 )
             ]
@@ -104,6 +104,15 @@ def build_cfg_platform_markup(_t: PreLocaleSelector, vm: SettingsViewModel) -> I
         ]
     )
     return Ikm(rows)
+
+
+def cfg_page_label(_t: PreLocaleSelector, page: CfgPage) -> str:
+    match page:
+        case CfgPage.PLATFORM:
+            label = _t("平台管理")
+        case CfgPage.MAIN:
+            label = ""
+    return str(label)
 
 
 def build_done_button(_t: PreLocaleSelector, vm: SettingsViewModel) -> Ikb:
