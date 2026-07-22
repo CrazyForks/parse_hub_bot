@@ -45,11 +45,11 @@ from plugins.helpers import (
     build_caption_by_str,
     build_start_text,
     create_richtext_telegraph,
-    resolve_media_info,
 )
 from repo.settings import SettingsConfig
 from services import ParseService, SettingsService, UserService
 from services.cache import CacheEntry, CacheMediaType, parse_cache, persistent_cache
+from services.media import resolve_media_info
 from services.pipeline import ParsePipeline, StatusReporter
 from utils.helpers import to_list, with_request_id
 

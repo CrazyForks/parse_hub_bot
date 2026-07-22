@@ -1,21 +1,14 @@
 """plugins 共用的工具函数和数据类"""
 
-from dataclasses import dataclass
-from pathlib import Path
-
-from easy_ai18n import PreLocaleSelector
 from easy_ai18n.core import LocaleContent
 from markdown import markdown
 from parsehub import ParseHub, Platform
-from parsehub.types import AnyMediaFile, AnyParseResult, DownloadResult, RichTextParseResult
-from parsehub.utils.media_info import MediaInfoReader
+from parsehub.types import AnyParseResult, RichTextParseResult
 from pyrogram import Client
 
 from i18n import t_
 from log import logger
 from utils.converter import clean_article_html
-from utils.helpers import to_list
-from utils.media_processing_unit import MediaProcessingUnit
 from utils.ph import Telegraph
 
 logger = logger.bind(name="Helpers")
@@ -27,9 +20,7 @@ COMMANDS = {
     "zip": t_("不处理媒体, 保存解析结果, 发送压缩包"),
     "jxjx": t_("绕过缓存解析"),
     "lang": t_("选择语言"),
-    "mode": t_("设置默认解析模式"),
-    "switches": t_("其他功能开关"),
-    "switch_platform": t_("启用/禁用 平台解析"),
+    "cfg": t_("打开配置面板"),
 }
 
 
@@ -45,27 +36,11 @@ def build_start_text() -> LocaleContent:
         f"/zip <链接> - 不处理媒体, 保存解析结果, 发送压缩包\n"
         f"/jxjx <链接> - 绕过缓存解析并发送媒体\n"
         f"/lang - 选择语言\n"
-        f"/mode - 设置默认解析模式\n"
-        f"/switches - 其他功能开关\n"
-        f"/switch_platform - 启用/禁用 平台解析\n"
+        f"/cfg - 打开配置面板\n"
+        f"/cfg <频道链接|@username|id> - 配置频道\n"
         f"</blockquote>\n\n"
         f"**开源地址: [GitHub](https://github.com/z-mio/parse_hub_bot)**"
     )
-
-
-@dataclass
-class ProcessedMedia:
-    source: AnyMediaFile
-    output_paths: list[Path] | None = None
-    output_dir: Path | None = None
-
-
-def resolve_media_info(processed: "ProcessedMedia", file_path: str) -> tuple[int, int, int]:
-    """获取媒体的宽、高、时长。若经过转码则从文件读取，否则使用源信息。"""
-    if processed.output_paths:
-        info = MediaInfoReader.read(file_path)
-        return info.width, info.height, info.duration
-    return processed.source.width, processed.source.height, getattr(processed.source, "duration", 0)
 
 
 def build_caption(parse_result: AnyParseResult, telegraph_url: str | None = None, *, hide_source: bool = False) -> str:
@@ -111,21 +86,6 @@ def format_text(text: str) -> str:
         return text
 
 
-def progress(current: int, total: int, unit: str, _t: PreLocaleSelector) -> str | None:
-    if unit == "bytes":
-        if total <= 0:
-            return None
-
-        text = _t(f"下 载 中... | {current * 100 / total:.0f}%")
-        if round(current * 100 / total, 1) % 25 == 0:
-            return str(text)
-    else:
-        text = _t(f"下 载 中... | {current}/{total}")
-        if (current + 1) % 3 == 0 or (current + 1) == total:
-            return str(text)
-    return None
-
-
 async def create_telegraph_page(html_content: str, cli: Client, parse_result: AnyParseResult) -> str:
     """创建 Telegraph 页面，返回页面 URL"""
     logger.debug(f"创建 Telegraph 页面: title={parse_result.title}")
@@ -151,23 +111,6 @@ async def create_richtext_telegraph(cli: Client, parse_result: RichTextParseResu
             md = md.replace("image.coolapk.com", "qpic.cn.in/image.coolapk.com")
     html = clean_article_html(markdown(md))
     return await create_telegraph_page(html, cli, parse_result)
-
-
-async def process_media_files(download_result: DownloadResult) -> list[ProcessedMedia]:
-    """对下载结果中的媒体文件进行处理，返回 ProcessedMedia 列表"""
-    processed_dir = download_result.output_dir.joinpath("processed")
-    processor = MediaProcessingUnit(processed_dir, segment_height=1920, logger=logger.bind(name="MediaProcessor").debug)
-    media_files = to_list(download_result.media)
-    logger.debug(f"开始媒体处理: 文件数={len(media_files)}, output_dir={processed_dir}")
-    processed_list: list[ProcessedMedia] = []
-    for media_file in media_files:
-        # 对于实况图片只处理图片, 不处理视频
-        logger.debug(f"处理文件: {media_file.path}")
-        result = await processor.process(media_file.path)
-        logger.debug(f"处理结果: output_paths={result.output_paths}")
-        processed_list.append(ProcessedMedia(media_file, result.output_paths, result.temp_dir))
-    logger.debug(f"媒体处理完成: 处理数={len(processed_list)}")
-    return processed_list
 
 
 def get_supported_platforms() -> str:

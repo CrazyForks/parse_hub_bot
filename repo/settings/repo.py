@@ -74,32 +74,30 @@ class SettingsRepo:
 
     async def get_current_config(self, target: SettingsTarget) -> SettingsConfig:
         """获取最新完整配置"""
+        migrated = await self.migrate(target)
+        if not migrated:
+            return DEFAULT_CONFIG
+        return _hydrate_config_patch(migrated.config)
+
+    async def _save_config_patch(self, target: SettingsTarget, config_patch: dict[str, Any]) -> Settings:
         settings = await self.get(target)
         if not settings:
-            return DEFAULT_CONFIG
-        original_raw = settings.config
-
-        if not (migrated := await self.migrate(target)):
-            return DEFAULT_CONFIG
-        migrated_config = SettingsConfig.model_validate(migrated.config)
-
-        if migrated.config != original_raw:
-            await self._save_config(target, migrated_config)
-
-        return migrated_config
-
-    async def _save_config(self, target: SettingsTarget, config: SettingsConfig) -> Settings:
-        settings = await self.get(target)
-        if not settings:
-            return await self.add(target, config)
-        settings.config = _config_to_patch(config)
+            settings = Settings(**target.dump(), config=config_patch)
+            self._session.add(settings)
+        else:
+            settings.config = config_patch
         await self._session.flush()
         return settings
 
+    async def _save_config(self, target: SettingsTarget, config: SettingsConfig) -> Settings:
+        return await self._save_config_patch(target, _config_to_patch(config))
+
     async def patch_config(self, target: SettingsTarget, **kwargs: Any) -> SettingsConfig:
-        current = await self.get_current_config(target)
-        config = SettingsConfig.model_validate(current.model_dump() | kwargs)
-        await self._save_config(target, config)
+        migrated = await self.migrate(target)
+        current_patch = dict(migrated.config) if migrated else {}
+        next_patch = current_patch | kwargs
+        config = _hydrate_config_patch(next_patch)
+        await self._save_config_patch(target, config.model_dump(mode="json", include=set(next_patch)))
         return config
 
     async def migrate(self, target: SettingsTarget) -> Settings | None:
@@ -138,6 +136,10 @@ class SettingsRepo:
 
         log.debug(f"设置配置迁移完成: schema_version={schema_version}")
         return settings
+
+
+def _hydrate_config_patch(config_patch: dict[str, Any]) -> SettingsConfig:
+    return SettingsConfig.model_validate(DEFAULT_CONFIG.model_dump(mode="json") | config_patch)
 
 
 def _config_to_patch(config: SettingsConfig, base: SettingsConfig = DEFAULT_CONFIG) -> dict[str, Any]:

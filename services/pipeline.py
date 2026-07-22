@@ -12,8 +12,9 @@ from parsehub.types import AniRef, AnyParseResult, PostType, ProgressUnit
 
 from core import bs, pl_cfg
 from log import logger
-from plugins.helpers import ProcessedMedia, process_media_files
 from services import ParseService
+from services.media import ProcessedMedia, process_media_files
+from services.media import progress as fmt_progress
 from utils.helpers import to_list
 
 logger = logger.bind(name="Pipeline")
@@ -56,8 +57,6 @@ class PipelineProgressCallback:
         self._t = _t
 
     async def __call__(self, current: int, total: int, unit: ProgressUnit, *args: Any, **kwargs: Any) -> None:
-        from plugins.helpers import progress as fmt_progress
-
         text = fmt_progress(current, total, unit, self._t)
         if not text or text == self._last_text:
             return

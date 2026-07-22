@@ -38,12 +38,11 @@ from i18n import t_
 from log import logger
 from plugins.filters import forwarded_from_bot_filter, platform_filter, via_me_filter
 from plugins.helpers import (
-    ProcessedMedia,
     build_caption,
     build_caption_by_str,
     create_richtext_telegraph,
-    resolve_media_info,
 )
+from plugins.settings_target import get_config_target
 from repo.settings import DEFAULT_CONFIG, SettingsConfig
 from services import (
     CacheEntry,
@@ -59,6 +58,7 @@ from services import (
     parse_cache,
     persistent_cache,
 )
+from services.media import ProcessedMedia, resolve_media_info
 from utils.helpers import pack_dir_to_tar_gz, to_list, with_request_id
 from utils.rate_limit import ParseRateLimitExceeded, parse_rate_limit
 
@@ -160,7 +160,7 @@ async def jx(cli: Client, msg: Message) -> None:
     if msg.from_user:
         async with get_session() as session:
             lang = await UserService(session).get_lang(msg.from_user.id)
-            user_config = await SettingsService(session).get_config_by_user(msg.from_user.id)
+            user_config = await SettingsService(session).get_config(get_config_target(msg))
             mode = user_config.default_mode
 
     _t = t_[lang]

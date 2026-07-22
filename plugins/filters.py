@@ -4,6 +4,7 @@ from pyrogram import filters
 from pyrogram.types import InlineQuery, Message, User
 
 from db.session import get_session
+from plugins.settings_target import get_config_target
 from services import ParseService, SettingsService
 
 
@@ -38,7 +39,8 @@ def platform_filter(use_user_config: bool = False) -> filters.Filter:
                 return True
 
             async with get_session() as session:
-                user_config = await SettingsService(session).get_config_by_user(update.from_user.id)
+                target = get_config_target(update)
+                user_config = await SettingsService(session).get_config(target)
                 if platform.id in user_config.disabled_platforms:
                     return False
                 return True

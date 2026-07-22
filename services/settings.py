@@ -123,56 +123,50 @@ class SettingsService:
         return await self.get_config(ChannelSettingsTarget(telegram_chat_id=telegram_chat_id))
 
     async def patch_config(self, target: AnySettingsTarget, **kwargs: Unpack[ConfigPatch]) -> SettingsConfig:
+        self._validate_config_patch(target, kwargs)
         return await self.settings.patch_config(await self._resolve(target), **kwargs)
 
     async def patch_config_by_user(self, telegram_user_id: int, **kwargs: Unpack[ConfigPatch]) -> SettingsConfig:
-        return await self.settings.patch_config(
-            await self._resolve(UserSettingsTarget(telegram_user_id=telegram_user_id)), **kwargs
-        )
+        return await self.patch_config(UserSettingsTarget(telegram_user_id=telegram_user_id), **kwargs)
 
     async def patch_config_by_group(self, telegram_chat_id: int, **kwargs: Unpack[ConfigPatch]) -> SettingsConfig:
-        return await self.settings.patch_config(
-            await self._resolve(GroupSettingsTarget(telegram_chat_id=telegram_chat_id)), **kwargs
-        )
+        return await self.patch_config(GroupSettingsTarget(telegram_chat_id=telegram_chat_id), **kwargs)
 
     async def patch_config_by_group_member(
         self, telegram_chat_id: int, telegram_user_id: int, **kwargs: Unpack[ConfigPatch]
     ) -> SettingsConfig:
-        return await self.settings.patch_config(
-            await self._resolve(
-                GroupMemberSettingsTarget(telegram_chat_id=telegram_chat_id, telegram_user_id=telegram_user_id)
-            ),
-            **kwargs,
+        return await self.patch_config(
+            GroupMemberSettingsTarget(telegram_chat_id=telegram_chat_id, telegram_user_id=telegram_user_id), **kwargs
         )
 
     async def patch_config_by_forum_topic(
         self, telegram_chat_id: int, telegram_thread_id: int, **kwargs: Unpack[ConfigPatch]
     ) -> SettingsConfig:
-        return await self.settings.patch_config(
-            await self._resolve(
-                ForumTopicSettingsTarget(telegram_chat_id=telegram_chat_id, telegram_thread_id=telegram_thread_id)
-            ),
-            **kwargs,
+        return await self.patch_config(
+            ForumTopicSettingsTarget(telegram_chat_id=telegram_chat_id, telegram_thread_id=telegram_thread_id), **kwargs
         )
 
     async def patch_config_by_forum_topic_member(
         self, telegram_chat_id: int, telegram_thread_id: int, telegram_user_id: int, **kwargs: Unpack[ConfigPatch]
     ) -> SettingsConfig:
-        return await self.settings.patch_config(
-            await self._resolve(
-                ForumTopicMemberSettingsTarget(
-                    telegram_chat_id=telegram_chat_id,
-                    telegram_thread_id=telegram_thread_id,
-                    telegram_user_id=telegram_user_id,
-                )
+        return await self.patch_config(
+            ForumTopicMemberSettingsTarget(
+                telegram_chat_id=telegram_chat_id,
+                telegram_thread_id=telegram_thread_id,
+                telegram_user_id=telegram_user_id,
             ),
             **kwargs,
         )
 
     async def patch_config_by_channel(self, telegram_chat_id: int, **kwargs: Unpack[ConfigPatch]) -> SettingsConfig:
-        return await self.settings.patch_config(
-            await self._resolve(ChannelSettingsTarget(telegram_chat_id=telegram_chat_id)), **kwargs
-        )
+        return await self.patch_config(ChannelSettingsTarget(telegram_chat_id=telegram_chat_id), **kwargs)
+
+    @staticmethod
+    def _validate_config_patch(target: AnySettingsTarget, config_patch: ConfigPatch) -> None:
+        for field_name in config_patch:
+            metadata = _get_config_metadata(field_name)
+            if target.scope not in metadata.scopes:
+                raise ValueError(f"配置字段 {field_name} 不支持写入 {target.scope.value} 范围")
 
     async def _resolve(self, target: AnySettingsTarget) -> SettingsTarget:
         match target:
