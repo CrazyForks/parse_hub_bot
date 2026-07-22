@@ -8,6 +8,7 @@ from markdown import markdown
 from parsehub import ParseHub, Platform
 from parsehub.types import AnyParseResult, RichTextParseResult
 from pyrogram import Client
+from pyrogram.types import Message
 
 from i18n import t_
 from log import logger
@@ -170,3 +171,7 @@ def parse_channel_ref(value: str) -> int | str:
         raise ValueError("频道用户名格式无效")
 
     return f"@{username}"
+
+
+def get_thread_id(msg: Message) -> int | None:
+    return msg.message_thread_id or (1 if msg.chat and msg.chat.is_forum else None)

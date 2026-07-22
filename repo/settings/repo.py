@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db.models.settings import Settings, SettingsScope
 from log import logger
 from repo.settings.migrations import REGISTRY
-from repo.settings.schema import CURRENT_SCHEMA_VERSION, DEFAULT_CONFIG, SettingsConfig
+from repo.settings.schema import CURRENT_SCHEMA_VERSION, DEFAULT_SETTINGS_CONFIG, SettingsConfig
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -61,7 +61,7 @@ class SettingsRepo:
     async def add(self, target: SettingsTarget, config: SettingsConfig | None = None) -> Settings:
         settings = Settings(
             **target.dump(),
-            config=_config_to_patch(config or DEFAULT_CONFIG),
+            config=_config_to_patch(config or DEFAULT_SETTINGS_CONFIG),
         )
         self._session.add(settings)
         await self._session.flush()
@@ -76,7 +76,7 @@ class SettingsRepo:
         """获取最新完整配置"""
         migrated = await self.migrate(target)
         if not migrated:
-            return DEFAULT_CONFIG
+            return DEFAULT_SETTINGS_CONFIG
         return _hydrate_config_patch(migrated.config)
 
     async def _save_config_patch(self, target: SettingsTarget, config_patch: dict[str, Any]) -> Settings:
@@ -136,10 +136,10 @@ class SettingsRepo:
 
 
 def _hydrate_config_patch(config_patch: dict[str, Any]) -> SettingsConfig:
-    return SettingsConfig.model_validate(DEFAULT_CONFIG.model_dump(mode="json") | config_patch)
+    return SettingsConfig.model_validate(DEFAULT_SETTINGS_CONFIG.model_dump(mode="json") | config_patch)
 
 
-def _config_to_patch(config: SettingsConfig, base: SettingsConfig = DEFAULT_CONFIG) -> dict[str, Any]:
+def _config_to_patch(config: SettingsConfig, base: SettingsConfig = DEFAULT_SETTINGS_CONFIG) -> dict[str, Any]:
     config_data = config.model_dump(mode="json")
     base_data = base.model_dump(mode="json")
 

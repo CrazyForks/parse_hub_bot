@@ -8,7 +8,7 @@ from db.models.settings import SettingsScope
 CURRENT_SCHEMA_VERSION = 1
 
 
-class DefaultMode(StrEnum):
+class ParseMode(StrEnum):
     PREVIEW = "preview"
     RAW = "raw"
     ZIP = "zip"
@@ -43,10 +43,10 @@ class SettingsConfig(BaseModel):
     model_config = ConfigDict(extra="allow")  # 保留旧字段
 
     default_mode: Annotated[
-        DefaultMode,
+        ParseMode,
         Field(description="默认解析模式"),
         ConfigMetadata(ALL_SCOPES, MergeStrategy.PREFERENCE),
-    ] = DefaultMode.PREVIEW
+    ] = ParseMode.PREVIEW
 
     auto_delete_url: Annotated[
         bool,
@@ -91,4 +91,4 @@ class SettingsConfig(BaseModel):
         return self.model_dump_json(indent=4, ensure_ascii=True)
 
 
-DEFAULT_CONFIG = SettingsConfig()
+DEFAULT_SETTINGS_CONFIG = SettingsConfig()

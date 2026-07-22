@@ -1,6 +1,7 @@
 from pyrogram.enums import ChatType
 from pyrogram.types import InlineQuery, Message
 
+from plugins.helpers import get_thread_id
 from services import (
     AnySettingsTarget,
     ChannelSettingsTarget,
@@ -20,7 +21,8 @@ def get_config_target(update: Message | InlineQuery) -> AnySettingsTarget:
     if not update.from_user:
         raise ValueError("缺少配置目标用户")
 
-    thread_id = update.message_thread_id
+    thread_id = get_thread_id(update)
+
     if update.chat and update.chat.id is not None and thread_id:
         return ForumTopicMemberSettingsTarget(
             telegram_chat_id=update.chat.id,

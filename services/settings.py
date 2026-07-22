@@ -4,9 +4,9 @@ from typing import Any, Literal, TypedDict, Unpack
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models.settings import SettingsScope
-from repo.settings import DefaultMode, SettingsConfig, SettingsRepo
+from repo.settings import ParseMode, SettingsConfig, SettingsRepo
 from repo.settings.repo import SettingsTarget
-from repo.settings.schema import DEFAULT_CONFIG, ConfigMetadata, MergeStrategy
+from repo.settings.schema import DEFAULT_SETTINGS_CONFIG, ConfigMetadata, MergeStrategy
 from services.chat import ChatService
 from services.forum_topic import ForumTopicService
 from services.user import UserService
@@ -63,7 +63,7 @@ type AnySettingsTarget = (
 
 
 class ConfigPatch(TypedDict, total=False):
-    default_mode: DefaultMode
+    default_mode: ParseMode
     auto_delete_url: bool
     disabled_platforms: list[str]
     enable_inline_raw_url: bool
@@ -218,4 +218,4 @@ def _merge_config_patches(scoped_patches: list[tuple[SettingsScope, dict[str, An
 
 
 def _hydrate_config(config_patch: dict[str, Any]) -> SettingsConfig:
-    return SettingsConfig.model_validate(DEFAULT_CONFIG.model_dump(mode="json") | config_patch)
+    return SettingsConfig.model_validate(DEFAULT_SETTINGS_CONFIG.model_dump(mode="json") | config_patch)

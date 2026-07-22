@@ -1,8 +1,5 @@
-import asyncio
 from collections.abc import Sequence
-from typing import Any
 
-from easy_ai18n import PreLocaleSelector
 from parsehub import AnyParseResult
 from parsehub.types import (
     AniRef,
@@ -11,7 +8,6 @@ from parsehub.types import (
     VideoRef,
 )
 from pyrogram import Client
-from pyrogram.errors import FloodWait, Forbidden, SlowmodeWait
 from pyrogram.types import (
     ChosenInlineResult,
     InlineQuery,
@@ -35,7 +31,6 @@ from pyrogram.types import (
     InlineKeyboardMarkup as Ikm,
 )
 
-from core import bs
 from db import get_session
 from i18n import t_
 from log import logger
@@ -45,282 +40,22 @@ from plugins.helpers import (
     build_caption_by_str,
     build_start_text,
     create_richtext_telegraph,
-    format_label,
 )
+from plugins.parse.reporters import InlineStatusReporter
 from repo.settings import SettingsConfig
 from services import ParseService, SettingsService, UserService
 from services.cache import CacheEntry, CacheMediaType, parse_cache, persistent_cache
 from services.media import resolve_media_info
-from services.pipeline import ParsePipeline, StatusReporter
+from services.pipeline import ParsePipeline
 from utils.helpers import to_list, with_request_id
 
 logger = logger.bind(name="InlineParse")
-DEFAULT_THUMB_URL = "https://telegra.ph/file/cdfdb65b83a4b7b2b6078.png"
+
+SEARCH_ICON = "https://i.imgloc.com/2023/06/15/Vbfazk.png"
+DEFAULT_PARSE_RESULT_THUMB_URL = "https://telegra.ph/file/cdfdb65b83a4b7b2b6078.png"
 LINK_ICON_URL = "https://i.iij.li/i/20260627/6a3fb12066abb.png"
-
-
-class InlineStatusReporter(StatusReporter):
-    """基于 inline_message_id 的状态报告器"""
-
-    def __init__(
-        self,
-        cli: Client,
-        inline_message_id: str,
-        caption: str = "",
-        *,
-        _t: PreLocaleSelector,
-        user_config: SettingsConfig,
-    ):
-        self._cli = cli
-        self._mid = inline_message_id
-        self._caption = caption
-        self._last_text: str | None = None
-        self._t = _t
-        self._user_config = user_config
-
-    async def report(self, text: str) -> None:
-        text = format_label(text)
-        full = f"{self._caption}\n{text}" if self._caption else text
-        if full == self._last_text:
-            return
-        self._last_text = full
-        await self._edit_inline_text(inline_message_id=self._mid, text=full)
-
-    async def report_error(self, stage: str, error: Exception) -> None:
-        text = self._t(f"{format_label(f'{stage}错误:')} \n```\n{error}```")
-        if bs.demo_mode:
-            text += self._t("\n\n**问题反馈: @MisakaSisters**")
-        await self._edit_inline_text(
-            inline_message_id=self._mid, text=text, link_preview_options=LinkPreviewOptions(is_disabled=True)
-        )
-
-        if self._user_config.keep_error_log:
-            return
-
-        async def fn() -> None:
-            await asyncio.sleep(15)
-            await self._edit_inline_text(
-                inline_message_id=self._mid,
-                text=self._caption,
-                link_preview_options=LinkPreviewOptions(is_disabled=True),
-            )
-
-        loop = asyncio.get_running_loop()
-        loop.create_task(fn())
-
-    async def _edit_inline_text(self, **kwargs: Any) -> None:
-        try:
-            await self._cli.edit_inline_text(**kwargs)
-        except (FloodWait, SlowmodeWait):
-            pass
-        except Forbidden as e:
-            logger.warning(f"消息发送失败, Bot 无权限: {e}")
-
-    async def dismiss(self) -> None:
-        pass
-
-
-def build_cached_inline_results(
-    entry: CacheEntry, raw_url: str, lang: str, config: SettingsConfig
-) -> list[InlineQueryResult]:
-    """有 file_id 缓存时，构建 cached 类型的 inline 结果（Telegram 服务端直发）"""
-    _t = t_[lang]
-
-    content = entry.parse_result.content
-    caption = build_caption_by_str(
-        entry.parse_result.title, content, raw_url, entry.telegraph_url, hide_source=config.hide_source
-    )
-    title = entry.parse_result.title or _t("无标题")
-
-    results: list[InlineQueryResult] = []
-
-    if config.enable_inline_raw_url:
-        results.append(
-            InlineQueryResultArticle(
-                title=_t("原始链接"),
-                description=raw_url,
-                input_message_content=InputTextMessageContent(
-                    raw_url, link_preview_options=LinkPreviewOptions(is_disabled=True)
-                ),
-                thumb_url=LINK_ICON_URL,
-                thumb_width=72,
-                thumb_height=72,
-            )
-        )
-
-    # 富文本
-    if entry.telegraph_url:
-        results.append(
-            InlineQueryResultArticle(
-                title=title,
-                input_message_content=InputTextMessageContent(
-                    caption,
-                    link_preview_options=LinkPreviewOptions(show_above_text=True),
-                ),
-            )
-        )
-        return results
-
-    if not entry.media:
-        results.append(
-            InlineQueryResultArticle(
-                title=title,
-                description=content,
-                input_message_content=InputTextMessageContent(
-                    caption,
-                    link_preview_options=LinkPreviewOptions(is_disabled=True),
-                ),
-            )
-        )
-        return results
-
-    for m in entry.media:
-        match m.type:
-            case CacheMediaType.PHOTO:
-                results.append(
-                    InlineQueryResultCachedPhoto(
-                        photo_file_id=m.file_id,
-                        title=title,
-                        caption=caption,
-                        description=content,
-                    )
-                )
-            case CacheMediaType.VIDEO:
-                results.append(
-                    InlineQueryResultCachedVideo(
-                        video_file_id=m.file_id,
-                        title=title,
-                        caption=caption,
-                        description=content,
-                    )
-                )
-            case CacheMediaType.ANIMATION:
-                results.append(
-                    InlineQueryResultCachedAnimation(
-                        animation_file_id=m.file_id,
-                        title=title,
-                        caption=caption,
-                    )
-                )
-            case CacheMediaType.DOCUMENT:
-                results.append(
-                    InlineQueryResultCachedDocument(
-                        document_file_id=m.file_id,
-                        title=title,
-                        caption=caption,
-                        description=content,
-                    )
-                )
-
-    return results
-
-
-async def build_inline_results(
-    parse_result: AnyParseResult, cli: Client, lang: str, config: SettingsConfig
-) -> list[InlineQueryResult]:
-    """根据解析结果构建内联查询结果列表"""
-    logger.debug(f"构建 inline 结果: type={parse_result.type}, title={parse_result.title}")
-    _t = t_[lang]
-
-    title = parse_result.title or _t("无标题")
-    media_list = to_list(parse_result.media)
-    reply_markup = Ikm([[Ikb(_t("原链接"), url=parse_result.raw_url)]])
-
-    results: list[InlineQueryResult] = []
-    if config.enable_inline_raw_url:
-        results.append(
-            InlineQueryResultArticle(
-                title=_t("原始链接"),
-                description=parse_result.raw_url,
-                input_message_content=InputTextMessageContent(
-                    parse_result.raw_url, link_preview_options=LinkPreviewOptions(is_disabled=True)
-                ),
-                thumb_url=LINK_ICON_URL,
-                thumb_width=72,
-                thumb_height=72,
-            )
-        )
-
-    # ── 富文本直接 telegraph 发送 ──
-    if parse_result.type == PostType.RICHTEXT:
-        url = await create_richtext_telegraph(cli, parse_result)
-        caption = build_caption(parse_result, url, hide_source=config.hide_source)
-        results.append(
-            InlineQueryResultArticle(
-                title=title,
-                description=parse_result.content,
-                input_message_content=InputTextMessageContent(
-                    caption,
-                    link_preview_options=LinkPreviewOptions(show_above_text=True),
-                ),
-            )
-        )
-        return results
-
-    caption = build_caption(parse_result, hide_source=config.hide_source)
-
-    if not media_list:
-        results.append(
-            InlineQueryResultArticle(
-                title=title,
-                description=parse_result.content,
-                input_message_content=InputTextMessageContent(
-                    caption,
-                    link_preview_options=LinkPreviewOptions(is_disabled=True),
-                ),
-            )
-        )
-        return results
-
-    for index, media_ref in enumerate(media_list):
-        if isinstance(media_ref, ImageRef):
-            results.append(
-                InlineQueryResultPhoto(
-                    media_ref.url,
-                    thumb_url=media_ref.thumb_url,
-                    photo_width=media_ref.width,
-                    photo_height=media_ref.height,
-                    caption=caption,
-                    title=title,
-                    description=parse_result.content,
-                )
-            )
-        elif isinstance(media_ref, VideoRef):
-            results.append(
-                InlineQueryResultPhoto(
-                    media_ref.thumb_url or DEFAULT_THUMB_URL,
-                    photo_width=media_ref.width,
-                    photo_height=media_ref.height,
-                    id=f"download_{index}",
-                    title=title,
-                    caption=caption,
-                    reply_markup=reply_markup,
-                )
-            )
-        elif isinstance(media_ref, AniRef):
-            if media_ref.ext != "gif":
-                results.append(
-                    InlineQueryResultVideo(
-                        media_ref.url,
-                        media_ref.thumb_url or DEFAULT_THUMB_URL,
-                        caption=caption,
-                        title=title,
-                        description=parse_result.content,
-                    )
-                )
-            else:
-                results.append(
-                    InlineQueryResultAnimation(
-                        media_ref.url,
-                        thumb_url=media_ref.thumb_url,
-                        caption=caption,
-                        title=title,
-                        description=parse_result.content,
-                    )
-                )
-
-    logger.debug(f"inline 结果构建完成: count={len(results)}")
-    return results
+LINK_ICON_WIDTH = 72
+LINK_ICON_HEIGHT = 72
 
 
 @Client.on_inline_query(~platform_filter(False))
@@ -335,7 +70,7 @@ async def inline_parse_tip(_: Client, inline_query: InlineQuery) -> None:
             input_message_content=InputTextMessageContent(
                 build_start_text()[lang], link_preview_options=LinkPreviewOptions(is_disabled=True)
             ),
-            thumb_url="https://i.imgloc.com/2023/06/15/Vbfazk.png",
+            thumb_url=SEARCH_ICON,
         )
     ]
     await inline_query.answer(results=results, cache_time=1)
@@ -435,3 +170,206 @@ async def inline_result_download(cli: Client, chosen_result: ChosenInlineResult)
             await reporter.report_error(_t("上传"), e)
         finally:
             logger.debug("inline 下载任务完成")
+
+
+def build_cached_inline_results(
+    entry: CacheEntry, raw_url: str, lang: str, config: SettingsConfig
+) -> list[InlineQueryResult]:
+    """有 file_id 缓存时，构建 cached 类型的 inline 结果（Telegram 服务端直发）"""
+    _t = t_[lang]
+
+    content = entry.parse_result.content
+    caption = build_caption_by_str(
+        entry.parse_result.title, content, raw_url, entry.telegraph_url, hide_source=config.hide_source
+    )
+    title = entry.parse_result.title or "-"
+
+    results: list[InlineQueryResult] = []
+
+    if config.enable_inline_raw_url:
+        results.append(
+            InlineQueryResultArticle(
+                title=_t("原始链接"),
+                description=raw_url,
+                input_message_content=InputTextMessageContent(
+                    raw_url, link_preview_options=LinkPreviewOptions(is_disabled=True)
+                ),
+                thumb_url=LINK_ICON_URL,
+                thumb_width=LINK_ICON_WIDTH,
+                thumb_height=LINK_ICON_HEIGHT,
+            )
+        )
+
+    # 富文本
+    if entry.telegraph_url:
+        results.append(
+            InlineQueryResultArticle(
+                title=title,
+                input_message_content=InputTextMessageContent(
+                    caption,
+                    link_preview_options=LinkPreviewOptions(show_above_text=True),
+                ),
+            )
+        )
+        return results
+
+    if not entry.media:
+        results.append(
+            InlineQueryResultArticle(
+                title=title,
+                description=content,
+                input_message_content=InputTextMessageContent(
+                    caption,
+                    link_preview_options=LinkPreviewOptions(is_disabled=True),
+                ),
+            )
+        )
+        return results
+
+    for m in entry.media:
+        match m.type:
+            case CacheMediaType.PHOTO:
+                results.append(
+                    InlineQueryResultCachedPhoto(
+                        photo_file_id=m.file_id,
+                        title=title,
+                        caption=caption,
+                        description=content,
+                    )
+                )
+            case CacheMediaType.VIDEO:
+                results.append(
+                    InlineQueryResultCachedVideo(
+                        video_file_id=m.file_id,
+                        title=title,
+                        caption=caption,
+                        description=content,
+                    )
+                )
+            case CacheMediaType.ANIMATION:
+                results.append(
+                    InlineQueryResultCachedAnimation(
+                        animation_file_id=m.file_id,
+                        title=title,
+                        caption=caption,
+                    )
+                )
+            case CacheMediaType.DOCUMENT:
+                results.append(
+                    InlineQueryResultCachedDocument(
+                        document_file_id=m.file_id,
+                        title=title,
+                        caption=caption,
+                        description=content,
+                    )
+                )
+
+    return results
+
+
+async def build_inline_results(
+    parse_result: AnyParseResult, cli: Client, lang: str, config: SettingsConfig
+) -> list[InlineQueryResult]:
+    """根据解析结果构建内联查询结果列表"""
+    logger.debug(f"构建 inline 结果: type={parse_result.type}, title={parse_result.title}")
+    _t = t_[lang]
+
+    title = parse_result.title or "-"
+    media_list = to_list(parse_result.media)
+    reply_markup = Ikm([[Ikb(_t("原链接"), url=parse_result.raw_url)]])
+
+    results: list[InlineQueryResult] = []
+    if config.enable_inline_raw_url:
+        results.append(
+            InlineQueryResultArticle(
+                title=_t("原始链接"),
+                description=parse_result.raw_url,
+                input_message_content=InputTextMessageContent(
+                    parse_result.raw_url, link_preview_options=LinkPreviewOptions(is_disabled=True)
+                ),
+                thumb_url=LINK_ICON_URL,
+                thumb_width=LINK_ICON_WIDTH,
+                thumb_height=LINK_ICON_HEIGHT,
+            )
+        )
+
+    # ── 富文本直接 telegraph 发送 ──
+    if parse_result.type == PostType.RICHTEXT:
+        url = await create_richtext_telegraph(cli, parse_result)
+        caption = build_caption(parse_result, url, hide_source=config.hide_source)
+        results.append(
+            InlineQueryResultArticle(
+                title=title,
+                description=parse_result.content,
+                input_message_content=InputTextMessageContent(
+                    caption,
+                    link_preview_options=LinkPreviewOptions(show_above_text=True),
+                ),
+            )
+        )
+        return results
+
+    caption = build_caption(parse_result, hide_source=config.hide_source)
+
+    if not media_list:
+        results.append(
+            InlineQueryResultArticle(
+                title=title,
+                description=parse_result.content,
+                input_message_content=InputTextMessageContent(
+                    caption,
+                    link_preview_options=LinkPreviewOptions(is_disabled=True),
+                ),
+            )
+        )
+        return results
+
+    for index, media_ref in enumerate(media_list):
+        if isinstance(media_ref, ImageRef):
+            results.append(
+                InlineQueryResultPhoto(
+                    media_ref.url,
+                    thumb_url=media_ref.thumb_url,
+                    photo_width=media_ref.width,
+                    photo_height=media_ref.height,
+                    caption=caption,
+                    title=title,
+                    description=parse_result.content,
+                )
+            )
+        elif isinstance(media_ref, VideoRef):
+            results.append(
+                InlineQueryResultPhoto(
+                    media_ref.thumb_url or DEFAULT_PARSE_RESULT_THUMB_URL,
+                    photo_width=media_ref.width,
+                    photo_height=media_ref.height,
+                    id=f"download_{index}",
+                    title=title,
+                    caption=caption,
+                    reply_markup=reply_markup,
+                )
+            )
+        elif isinstance(media_ref, AniRef):
+            if media_ref.ext != "gif":
+                results.append(
+                    InlineQueryResultVideo(
+                        media_ref.url,
+                        media_ref.thumb_url or DEFAULT_PARSE_RESULT_THUMB_URL,
+                        caption=caption,
+                        title=title,
+                        description=parse_result.content,
+                    )
+                )
+            else:
+                results.append(
+                    InlineQueryResultAnimation(
+                        media_ref.url,
+                        thumb_url=media_ref.thumb_url,
+                        caption=caption,
+                        title=title,
+                        description=parse_result.content,
+                    )
+                )
+
+    logger.debug(f"inline 结果构建完成: count={len(results)}")
+    return results

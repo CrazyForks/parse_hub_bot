@@ -11,7 +11,7 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 
 from alembic import op
-from repo.settings import DEFAULT_CONFIG
+from repo.settings import DEFAULT_SETTINGS_CONFIG
 
 # revision identifiers, used by Alembic.
 revision: str = "b3a0e10df4b2"
@@ -71,7 +71,9 @@ def upgrade() -> None:
         config = dict(row["settings_json"] or {})
         config.pop("schema_version")
         config = {
-            key: value for key, value in config.items() if value != DEFAULT_CONFIG.model_dump(mode="json").get(key)
+            key: value
+            for key, value in config.items()
+            if value != DEFAULT_SETTINGS_CONFIG.model_dump(mode="json").get(key)
         }
         rows_to_insert.append(
             {
