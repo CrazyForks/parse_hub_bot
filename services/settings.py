@@ -80,9 +80,6 @@ class SettingsService:
         self.settings = SettingsRepo(session)
 
     async def get_config(self, target: AnySettingsTarget) -> SettingsConfig:
-        return await self.get_effective_config(target)
-
-    async def get_effective_config(self, target: AnySettingsTarget) -> SettingsConfig:
         chain = await self._resolve_config_chain(target)
 
         scoped_patches = [
@@ -95,71 +92,9 @@ class SettingsService:
     async def get_config_by_user(self, telegram_user_id: int) -> SettingsConfig:
         return await self.get_config(UserSettingsTarget(telegram_user_id=telegram_user_id))
 
-    async def get_config_by_group(self, telegram_chat_id: int) -> SettingsConfig:
-        return await self.get_config(GroupSettingsTarget(telegram_chat_id=telegram_chat_id))
-
-    async def get_config_by_group_member(self, telegram_chat_id: int, telegram_user_id: int) -> SettingsConfig:
-        return await self.get_config(
-            GroupMemberSettingsTarget(telegram_chat_id=telegram_chat_id, telegram_user_id=telegram_user_id)
-        )
-
-    async def get_config_by_forum_topic(self, telegram_chat_id: int, telegram_thread_id: int) -> SettingsConfig:
-        return await self.get_config(
-            ForumTopicSettingsTarget(telegram_chat_id=telegram_chat_id, telegram_thread_id=telegram_thread_id)
-        )
-
-    async def get_config_by_forum_topic_member(
-        self, telegram_chat_id: int, telegram_thread_id: int, telegram_user_id: int
-    ) -> SettingsConfig:
-        return await self.get_config(
-            ForumTopicMemberSettingsTarget(
-                telegram_chat_id=telegram_chat_id,
-                telegram_thread_id=telegram_thread_id,
-                telegram_user_id=telegram_user_id,
-            )
-        )
-
-    async def get_config_by_channel(self, telegram_chat_id: int) -> SettingsConfig:
-        return await self.get_config(ChannelSettingsTarget(telegram_chat_id=telegram_chat_id))
-
     async def patch_config(self, target: AnySettingsTarget, **kwargs: Unpack[ConfigPatch]) -> SettingsConfig:
         self._validate_config_patch(target, kwargs)
         return await self.settings.patch_config(await self._resolve(target), **kwargs)
-
-    async def patch_config_by_user(self, telegram_user_id: int, **kwargs: Unpack[ConfigPatch]) -> SettingsConfig:
-        return await self.patch_config(UserSettingsTarget(telegram_user_id=telegram_user_id), **kwargs)
-
-    async def patch_config_by_group(self, telegram_chat_id: int, **kwargs: Unpack[ConfigPatch]) -> SettingsConfig:
-        return await self.patch_config(GroupSettingsTarget(telegram_chat_id=telegram_chat_id), **kwargs)
-
-    async def patch_config_by_group_member(
-        self, telegram_chat_id: int, telegram_user_id: int, **kwargs: Unpack[ConfigPatch]
-    ) -> SettingsConfig:
-        return await self.patch_config(
-            GroupMemberSettingsTarget(telegram_chat_id=telegram_chat_id, telegram_user_id=telegram_user_id), **kwargs
-        )
-
-    async def patch_config_by_forum_topic(
-        self, telegram_chat_id: int, telegram_thread_id: int, **kwargs: Unpack[ConfigPatch]
-    ) -> SettingsConfig:
-        return await self.patch_config(
-            ForumTopicSettingsTarget(telegram_chat_id=telegram_chat_id, telegram_thread_id=telegram_thread_id), **kwargs
-        )
-
-    async def patch_config_by_forum_topic_member(
-        self, telegram_chat_id: int, telegram_thread_id: int, telegram_user_id: int, **kwargs: Unpack[ConfigPatch]
-    ) -> SettingsConfig:
-        return await self.patch_config(
-            ForumTopicMemberSettingsTarget(
-                telegram_chat_id=telegram_chat_id,
-                telegram_thread_id=telegram_thread_id,
-                telegram_user_id=telegram_user_id,
-            ),
-            **kwargs,
-        )
-
-    async def patch_config_by_channel(self, telegram_chat_id: int, **kwargs: Unpack[ConfigPatch]) -> SettingsConfig:
-        return await self.patch_config(ChannelSettingsTarget(telegram_chat_id=telegram_chat_id), **kwargs)
 
     @staticmethod
     def _validate_config_patch(target: AnySettingsTarget, config_patch: ConfigPatch) -> None:

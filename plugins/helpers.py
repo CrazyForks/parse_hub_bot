@@ -5,9 +5,18 @@ from markdown import markdown
 from parsehub import ParseHub, Platform
 from parsehub.types import AnyParseResult, RichTextParseResult
 from pyrogram import Client
+from pyrogram.enums import ChatType
+from pyrogram.types import InlineQuery, Message
 
 from i18n import t_
 from log import logger
+from services import (
+    AnySettingsTarget,
+    ChannelSettingsTarget,
+    ForumTopicMemberSettingsTarget,
+    GroupMemberSettingsTarget,
+    UserSettingsTarget,
+)
 from utils.converter import clean_article_html
 from utils.ph import Telegraph
 
@@ -20,7 +29,7 @@ COMMANDS = {
     "zip": t_("不处理媒体, 保存解析结果, 发送压缩包"),
     "jxjx": t_("绕过缓存解析"),
     "lang": t_("选择语言"),
-    "cfg": t_("打开配置面板"),
+    "cfg": t_("配置"),
 }
 
 
@@ -36,8 +45,8 @@ def build_start_text() -> LocaleContent:
         f"/zip <链接> - 不处理媒体, 保存解析结果, 发送压缩包\n"
         f"/jxjx <链接> - 绕过缓存解析并发送媒体\n"
         f"/lang - 选择语言\n"
-        f"/cfg - 打开配置面板\n"
-        f"/cfg <频道链接|@username|id> - 配置频道\n"
+        f"/cfg - 配置\n"
+        f"/cfg <频道用户名/链接/id> - 频道配置\n"
         f"</blockquote>\n\n"
         f"**开源地址: [GitHub](https://github.com/z-mio/parse_hub_bot)**"
     )
@@ -72,7 +81,7 @@ def build_caption_by_str(
         body = format_text("\n\n".join(parts) or "**无标题**")
     if hide_source:
         return body
-    return f"{body}\n\n<b>▎<a href='{raw_url}'>Source</a></b>"
+    return f"{body}\n\n{format_label(f"<a href='{raw_url}'>Source</a>")}"
 
 
 def format_text(text: str) -> str:
@@ -119,3 +128,31 @@ def get_supported_platforms() -> str:
         text.append(f"**{i['name']}** __({'__, __'.join(i['supported_types'])})__")
     text.sort(reverse=True)
     return "\n".join(text)
+
+
+def format_label(text: str) -> str:
+    return f"<b>▎{text}</b>"
+
+
+def get_config_target(update: Message | InlineQuery) -> AnySettingsTarget:
+    if isinstance(update, InlineQuery):
+        return UserSettingsTarget(telegram_user_id=update.from_user.id)
+
+    if update.chat and update.chat.id is not None and update.chat.type == ChatType.CHANNEL:
+        return ChannelSettingsTarget(telegram_chat_id=update.chat.id)
+
+    if not update.from_user:
+        raise ValueError("缺少配置目标用户")
+
+    thread_id = update.message_thread_id
+    if update.chat and update.chat.id is not None and thread_id:
+        return ForumTopicMemberSettingsTarget(
+            telegram_chat_id=update.chat.id,
+            telegram_thread_id=thread_id,
+            telegram_user_id=update.from_user.id,
+        )
+
+    if update.chat and update.chat.id is not None and update.chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]:
+        return GroupMemberSettingsTarget(telegram_chat_id=update.chat.id, telegram_user_id=update.from_user.id)
+
+    return UserSettingsTarget(telegram_user_id=update.from_user.id)

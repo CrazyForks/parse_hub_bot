@@ -45,6 +45,7 @@ from plugins.helpers import (
     build_caption_by_str,
     build_start_text,
     create_richtext_telegraph,
+    format_label,
 )
 from repo.settings import SettingsConfig
 from services import ParseService, SettingsService, UserService
@@ -78,7 +79,7 @@ class InlineStatusReporter(StatusReporter):
         self._user_config = user_config
 
     async def report(self, text: str) -> None:
-        text = f"**▎{text}**"
+        text = format_label(text)
         full = f"{self._caption}\n{text}" if self._caption else text
         if full == self._last_text:
             return
@@ -86,7 +87,7 @@ class InlineStatusReporter(StatusReporter):
         await self._edit_inline_text(inline_message_id=self._mid, text=full)
 
     async def report_error(self, stage: str, error: Exception) -> None:
-        text = self._t(f"**▎{stage}错误:** \n```\n{error}```")
+        text = self._t(f"{format_label(f'{stage}错误:')} \n```\n{error}```")
         if bs.demo_mode:
             text += self._t("\n\n**问题反馈: @MisakaSisters**")
         await self._edit_inline_text(

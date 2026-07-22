@@ -4,7 +4,7 @@ from pyrogram import filters
 from pyrogram.types import InlineQuery, Message, User
 
 from db.session import get_session
-from plugins.settings_target import get_config_target
+from plugins.helpers import get_config_target
 from services import ParseService, SettingsService
 
 

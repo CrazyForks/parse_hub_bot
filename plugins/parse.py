@@ -41,8 +41,9 @@ from plugins.helpers import (
     build_caption,
     build_caption_by_str,
     create_richtext_telegraph,
+    format_label,
+    get_config_target,
 )
-from plugins.settings_target import get_config_target
 from repo.settings import DEFAULT_CONFIG, SettingsConfig
 from services import (
     CacheEntry,
@@ -106,10 +107,11 @@ class MessageStatusReporter(StatusReporter):
     async def report(self, text: str) -> None:
         if self._user_config.noprogress:
             return
-        await self._edit_text(f"**▎{text}**")
+        await self._edit_text(format_label(text))
 
     async def report_error(self, stage: str, error: Exception) -> None:
-        text = self._t(f"**▎{stage}错误:** \n```\n{error}```")
+        t = format_label(self._t(f"{stage}错误:"))
+        text = self._t(f"{t} \n```\n{error}```")
         if bs.demo_mode:
             text += self._t("\n\n**问题反馈: @MisakaSisters**")
         await self._edit_text(
@@ -181,7 +183,7 @@ async def jx(cli: Client, msg: Message) -> None:
         if not text and msg.reply_to_message:
             text = msg.reply_to_message.text or msg.reply_to_message.caption or ""
         if not text:
-            await msg.reply_text(_t("**▎请加上链接或回复一条消息**"))
+            await msg.reply_text(format_label(_t("请加上链接或回复一条消息")))
             return
     else:
         text = msg.text or msg.caption or ""
@@ -190,7 +192,7 @@ async def jx(cli: Client, msg: Message) -> None:
     urls = list({i for i in tokens if ParseService().parser.get_platform(i)})[:10]
 
     if not urls:
-        await msg.reply_text(_t("**▎不支持的平台**"))
+        await msg.reply_text(format_label(_t("不支持的平台")))
         return
 
     tasks = [
@@ -244,7 +246,7 @@ async def _handle_parse_request(
             logger.warning(
                 f"速率限制 {e.retry_after:.1f}s, chat_id={msg.chat.id if msg.chat else None}, msg_id={msg.id}"
             )
-            text = _t(f"**▎解析过于频繁, 请在 {e.retry_after:.1f}s 后重试**")
+            text = format_label(_t(f"解析过于频繁, 请在 {e.retry_after:.1f}s 后重试"))
             if bs.demo_mode:
                 text += _t(
                     "\n\n>**为保障所有用户的使用体验, 当前已启用速率限制**\n\n"
@@ -562,7 +564,8 @@ async def _send_raw(
             if gifs:
                 await _send_with_rate_limit(
                     lambda: msg.reply_text(
-                        _t("**▎GIF 下载链接**"), reply_markup=_build_gif_button(to_list(result.parse_result.media))
+                        format_label(_t("GIF 下载链接")),
+                        reply_markup=_build_gif_button(to_list(result.parse_result.media)),
                     )
                 )
             await _send_with_rate_limit(
@@ -720,7 +723,9 @@ async def _send_multi(
     if len([i for i in media_refs if isinstance(i, AniRef)]) > GIF_ONLY_SKIP_DOWNLOAD_COUNT_THRESHOLD:
         not_cache = True
         await _send_with_rate_limit(
-            lambda: msg.reply_text(_t("**▎GIF 过多跳过上传, 请自行下载**"), reply_markup=_build_gif_button(media_refs))
+            lambda: msg.reply_text(
+                format_label(_t("GIF 过多跳过上传, 请自行下载")), reply_markup=_build_gif_button(media_refs)
+            )
         )
     else:
         for ani in animations:

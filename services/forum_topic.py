@@ -32,5 +32,6 @@ class ForumTopicService:
 
     async def ensure(self, telegram_chat_id: int, telegram_thread_id: int) -> ForumTopic:
         if not (ft := await self.get(telegram_chat_id, telegram_thread_id)):
-            ft = await self.forum_topic.add(telegram_chat_id, telegram_thread_id)
+            chat = await self.chat.ensure_group(telegram_chat_id)
+            ft = await self.forum_topic.add(chat.id, telegram_thread_id)
         return ft

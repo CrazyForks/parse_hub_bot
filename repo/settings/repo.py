@@ -89,9 +89,6 @@ class SettingsRepo:
         await self._session.flush()
         return settings
 
-    async def _save_config(self, target: SettingsTarget, config: SettingsConfig) -> Settings:
-        return await self._save_config_patch(target, _config_to_patch(config))
-
     async def patch_config(self, target: SettingsTarget, **kwargs: Any) -> SettingsConfig:
         migrated = await self.migrate(target)
         current_patch = dict(migrated.config) if migrated else {}

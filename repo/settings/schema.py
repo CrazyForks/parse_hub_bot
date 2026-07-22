@@ -9,6 +9,17 @@ CURRENT_SCHEMA_VERSION = 1
 
 DefaultMode = Literal["preview", "raw", "zip"]
 
+ALL_SCOPES = frozenset(SettingsScope)
+
+POLICY_SCOPES = frozenset(
+    [
+        SettingsScope.USER,
+        SettingsScope.GROUP,
+        SettingsScope.FORUM_TOPIC,
+        SettingsScope.CHANNEL,
+    ]
+)
+
 
 class MergeStrategy(Enum):
     PREFERENCE = "preference"
@@ -29,19 +40,22 @@ class SettingsConfig(BaseModel):
     default_mode: Annotated[
         DefaultMode,
         Field(description="默认解析模式"),
-        ConfigMetadata(frozenset(SettingsScope), MergeStrategy.PREFERENCE),
+        ConfigMetadata(ALL_SCOPES, MergeStrategy.PREFERENCE),
     ] = "preview"
 
     auto_delete_url: Annotated[
         bool,
         Field(description="解析完成后自动删除分享链接"),
-        ConfigMetadata(frozenset(SettingsScope), MergeStrategy.PREFERENCE),
+        ConfigMetadata(ALL_SCOPES, MergeStrategy.PREFERENCE),
     ] = False
 
     disabled_platforms: Annotated[
         list[str],
         Field(description="禁用的平台"),
-        ConfigMetadata(frozenset(SettingsScope), MergeStrategy.POLICY),
+        ConfigMetadata(
+            POLICY_SCOPES,
+            MergeStrategy.POLICY,
+        ),
     ] = []
 
     enable_inline_raw_url: Annotated[
@@ -53,19 +67,19 @@ class SettingsConfig(BaseModel):
     keep_error_log: Annotated[
         bool,
         Field(description="保留错误日志"),
-        ConfigMetadata(frozenset(SettingsScope), MergeStrategy.PREFERENCE),
+        ConfigMetadata(ALL_SCOPES, MergeStrategy.PREFERENCE),
     ] = False
 
     hide_source: Annotated[
         bool,
         Field(description="隐藏底部 Source 超链接"),
-        ConfigMetadata(frozenset(SettingsScope), MergeStrategy.PREFERENCE),
+        ConfigMetadata(ALL_SCOPES, MergeStrategy.PREFERENCE),
     ] = False
 
     noprogress: Annotated[
         bool,
         Field(description="禁用解析进度, 直接发送结果"),
-        ConfigMetadata(frozenset(SettingsScope), MergeStrategy.POLICY),
+        ConfigMetadata(POLICY_SCOPES, MergeStrategy.POLICY),
     ] = False
 
     def __str__(self) -> str:
