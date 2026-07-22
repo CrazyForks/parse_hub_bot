@@ -87,7 +87,7 @@ BOOL_SWITCHES = (
     BoolSwitchDTO(
         field="enable_inline_raw_url",
         code="ir",
-        label=t_("内联原始 URL 选项"),
+        label=t_("内联「原始 URL」选项"),
         get_value=lambda config: config.enable_inline_raw_url,
         patch=lambda settings, target, value: settings.patch_config(target, enable_inline_raw_url=value),
     ),
@@ -101,7 +101,7 @@ BOOL_SWITCHES = (
     BoolSwitchDTO(
         field="hide_source",
         code="hs",
-        label=t_('隐藏底部 "Source"'),
+        label=t_('隐藏底部「Source」'),
         get_value=lambda config: config.hide_source,
         patch=lambda settings, target, value: settings.patch_config(target, hide_source=value),
     ),
