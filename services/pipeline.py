@@ -87,7 +87,7 @@ class ParsePipeline:
         gif_only_skip_download_count_threshold: int = 0,
         richtext_skip_download: bool = True,
         save_metadata: bool = False,
-        _t: PreLocaleSelector,
+        t: PreLocaleSelector,
     ):
         """
         :param url: 未清理的 URL
@@ -104,7 +104,7 @@ class ParsePipeline:
         self._gif_only_skip_download_count_threshold = gif_only_skip_download_count_threshold
         self._richtext_skip_download = richtext_skip_download
         self._save_metadata = save_metadata
-        self._t = _t
+        self._t = t
         self._result: PipelineResult | None = None
         self._owns_inflight = False
 

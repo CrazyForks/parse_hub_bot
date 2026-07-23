@@ -372,11 +372,10 @@ async def send_media(
     caption: str,
     *,
     _t: PreLocaleSelector,
-    video_cover: bool,
 ) -> CacheEntry | None:
     """构建、发送媒体，并返回缓存条目。"""
     media_refs = to_list(parse_result.media)
-    photos_videos, animations = build_input_media(media_refs, processed_list, video_cover=video_cover)
+    photos_videos, animations = build_input_media(media_refs, processed_list, video_cover=sender.config.video_cover)
     all_count = len(photos_videos) + len(animations)
     logger.debug(f"媒体分类完成: animations={len(animations)}, photos_videos={len(photos_videos)}")
 

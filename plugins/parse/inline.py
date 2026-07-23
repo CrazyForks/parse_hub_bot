@@ -122,8 +122,8 @@ async def inline_result_download(cli: Client, chosen_result: ChosenInlineResult)
     logger.debug(f"缓存命中: {cached_result is not None}")
 
     caption = build_caption(cached_result, hide_source=config.hide_source) if cached_result else ""
-    reporter = InlineStatusReporter(cli, inline_message_id, caption, _t=_t, user_config=config)
-    with ParsePipeline(query, raw_url, reporter, parse_result=cached_result, singleflight=False, _t=_t) as pipeline:
+    reporter = InlineStatusReporter(cli, inline_message_id, caption, t=_t, user_config=config)
+    with ParsePipeline(query, raw_url, reporter, parse_result=cached_result, singleflight=False, t=_t) as pipeline:
         if (result := await pipeline.run()) is None:
             return
 

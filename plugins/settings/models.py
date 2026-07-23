@@ -126,6 +126,13 @@ BOOL_SWITCHES = (
         get_value=lambda config: config.video_cover,
         patch=lambda settings, target, value: settings.patch_config(target, video_cover=value),
     ),
+    BoolSwitchDTO(
+        field="reply_msg",
+        code="rm",
+        label=t_("回复消息"),
+        get_value=lambda config: config.reply_msg,
+        patch=lambda settings, target, value: settings.patch_config(target, reply_msg=value),
+    ),
 )
 
 BOOL_SWITCH_MAP = {switch.code: switch for switch in BOOL_SWITCHES}

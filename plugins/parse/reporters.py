@@ -35,13 +35,13 @@ class MessageStatusReporter(StatusReporter):
         self,
         user_msg: Message,
         *,
-        _t: PreLocaleSelector,
+        t: PreLocaleSelector,
         config: SettingsConfig,
         on_forbidden: Callable[[Message, SettingsConfig], Awaitable[None]] | None = None,
     ):
         self._user_msg = user_msg
         self._msg: Message | None = None
-        self._t = _t
+        self._t = t
         self._config = config
         self._on_forbidden = on_forbidden
 
@@ -98,14 +98,14 @@ class InlineStatusReporter(StatusReporter):
         inline_message_id: str,
         caption: str = "",
         *,
-        _t: PreLocaleSelector,
+        t: PreLocaleSelector,
         user_config: SettingsConfig,
     ):
         self._cli = cli
         self._mid = inline_message_id
         self._caption = caption
         self._last_text: str | None = None
-        self._t = _t
+        self._t = t
         self._user_config = user_config
 
     async def report(self, text: str) -> None:

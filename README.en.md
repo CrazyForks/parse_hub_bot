@@ -276,6 +276,7 @@ Before submitting code, run at least:
 
 ```bash
 ruff format && ruff check --fix && uv run mypy
+uv run pytest
 ```
 
 ## 📄 License

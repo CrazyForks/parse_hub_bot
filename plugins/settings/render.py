@@ -44,9 +44,9 @@ def build_cfg_target_markup(vm: SettingsViewModel) -> Ikm:
 def build_cfg_main_markup(_t: PreLocaleSelector, vm: SettingsViewModel) -> Ikm:
     rows: list[list[Ikb]] = []
     mode_map = {
-        ParseMode.PREVIEW: _t("预览"),
-        ParseMode.RAW: _t("原始"),
-        ParseMode.ZIP: _t("压缩"),
+        ParseMode.PREVIEW: "/jx",
+        ParseMode.RAW: "/raw",
+        ParseMode.ZIP: "/zip",
     }
     if "default_mode" in vm.allowed_fields:
         rows.append([Ikb(_t("默认解析模式"), callback_data="placeholder", style=ButtonStyle.PRIMARY)])
