@@ -65,7 +65,9 @@ class MessageSender:
                     raise
             except Forbidden as e:
                 logger.warning(f"消息发送失败, Bot 无权限: {e}")
-        raise RuntimeError("发送重试失败")
+                break
+            await asyncio.sleep(0.5)
+        raise RuntimeError("发送失败")
 
     async def chat_action(self, action: enums.ChatAction) -> None:
         await self.msg.reply_chat_action(action)
