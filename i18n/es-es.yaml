@@ -1,4 +1,5 @@
 024738655610: Opción de "URL original" en línea
+047ddf74eb5e: Esta no es tu configuración
 04f706887b08: El bot no se ha unido a este canal, por favor añade el bot al canal
   antes de configurar
 06778dbf05d5: Gestión de la plataforma
@@ -82,6 +83,7 @@
 5a9f36a77173: Empaquetar
 5b943dc87178: Enlace de descarga del GIF
 5bc4920f7c82: "{format_label(f'{stage}错误:')} \n```\n{error}```"
+5e788d9e0992: No es un canal
 5f411223ca5a: Volver
 5fcfdc5f95ad: '**▎Seleccionar modo de análisis predeterminado**'
 645dbc5504e7: Vista previa

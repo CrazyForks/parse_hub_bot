@@ -1,4 +1,5 @@
 024738655610: Inline "Originele URL" optie
+047ddf74eb5e: Dit is niet jouw configuratie
 04f706887b08: Bot is niet toegevoegd aan dit kanaal, voeg de Bot eerst toe aan het
   kanaal voordat je het configureert
 06778dbf05d5: Platformbeheer
@@ -81,6 +82,7 @@
 5a9f36a77173: Inpakken
 5b943dc87178: GIF downloadlink
 5bc4920f7c82: "{format_label(f'{stage}错误:')} \n```\n{error}```"
+5e788d9e0992: Geen kanaal
 5f411223ca5a: Terug
 5fcfdc5f95ad: '**▎Selecteer standaard ontledingsmodus**'
 645dbc5504e7: Voorbeeld

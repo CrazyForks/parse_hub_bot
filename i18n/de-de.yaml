@@ -1,4 +1,5 @@
 024738655610: Inline-Option "Original URL"
+047ddf74eb5e: Das ist nicht deine Konfiguration
 04f706887b08: Bot ist diesem Kanal nicht beigetreten, bitte fügen Sie den Bot zuerst
   dem Kanal hinzu und konfigurieren Sie ihn dann.
 06778dbf05d5: Plattformverwaltung
@@ -80,6 +81,7 @@
 5a9f36a77173: Verpacken
 5b943dc87178: GIF-Download-Link
 5bc4920f7c82: "{format_label(f'{stage}错误:')} \n```\n{error}```"
+5e788d9e0992: Kein Kanal
 5f411223ca5a: Zurück
 5fcfdc5f95ad: '**▎Standard-Parsing-Modus auswählen**'
 645dbc5504e7: Vorschau
