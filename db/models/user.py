@@ -6,13 +6,14 @@ from typing import TYPE_CHECKING
 from sqlalchemy import BigInteger, DateTime, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from core import bs
 from db.base import Base
 
 if TYPE_CHECKING:
-    from db.models.user_settings import UserSettings
+    from db.models.settings import Settings
 
 
-class Users(Base):
+class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(
@@ -22,7 +23,9 @@ class Users(Base):
     )
     telegram_user_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False)
 
-    language_code: Mapped[str] = mapped_column(String(16), nullable=False, default="zh-hans", server_default="zh-hans")
+    language_code: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=bs.language, server_default=bs.language
+    )
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -32,10 +35,8 @@ class Users(Base):
         onupdate=func.now(),
     )
 
-    settings: Mapped[UserSettings | None] = relationship(
-        "UserSettings",
+    settings: Mapped[list[Settings]] = relationship(
+        "Settings",
         back_populates="user",
-        cascade="all, delete-orphan",
-        single_parent=True,
-        uselist=False,
+        passive_deletes=True,
     )

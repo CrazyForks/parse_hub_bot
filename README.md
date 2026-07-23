@@ -275,6 +275,7 @@ platforms:
 
 ```bash
 ruff format && ruff check --fix && uv run mypy
+uv run pytest
 ```
 
 ## 📄 开源协议

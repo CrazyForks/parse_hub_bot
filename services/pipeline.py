@@ -12,8 +12,9 @@ from parsehub.types import AniRef, AnyParseResult, PostType, ProgressUnit
 
 from core import bs, pl_cfg
 from log import logger
-from plugins.helpers import ProcessedMedia, process_media_files
 from services import ParseService
+from services.media import ProcessedMedia, process_media_files
+from services.media import progress as fmt_progress
 from utils.helpers import to_list
 
 logger = logger.bind(name="Pipeline")
@@ -56,8 +57,6 @@ class PipelineProgressCallback:
         self._t = _t
 
     async def __call__(self, current: int, total: int, unit: ProgressUnit, *args: Any, **kwargs: Any) -> None:
-        from plugins.helpers import progress as fmt_progress
-
         text = fmt_progress(current, total, unit, self._t)
         if not text or text == self._last_text:
             return
@@ -88,7 +87,7 @@ class ParsePipeline:
         gif_only_skip_download_count_threshold: int = 0,
         richtext_skip_download: bool = True,
         save_metadata: bool = False,
-        _t: PreLocaleSelector,
+        t: PreLocaleSelector,
     ):
         """
         :param url: 未清理的 URL
@@ -105,7 +104,7 @@ class ParsePipeline:
         self._gif_only_skip_download_count_threshold = gif_only_skip_download_count_threshold
         self._richtext_skip_download = richtext_skip_download
         self._save_metadata = save_metadata
-        self._t = _t
+        self._t = t
         self._result: PipelineResult | None = None
         self._owns_inflight = False
 

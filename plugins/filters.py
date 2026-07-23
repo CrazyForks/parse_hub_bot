@@ -4,14 +4,15 @@ from pyrogram import filters
 from pyrogram.types import InlineQuery, Message, User
 
 from db.session import get_session
-from services import AccountService, ParseService
+from plugins.context import get_config_target
+from services import ParseService, SettingsService
 
 
-def platform_filter(use_user_config: bool = False) -> filters.Filter:
+def platform_filter(use_config: bool = False) -> filters.Filter:
     """
     平台过滤器
     Args:
-        use_user_config: 使用用户配置
+        use_config: 使用用户配置
 
     Returns:
 
@@ -38,14 +39,15 @@ def platform_filter(use_user_config: bool = False) -> filters.Filter:
                 return True
 
             async with get_session() as session:
-                user_config = await AccountService(session, update.from_user.id).get_config()
+                target = get_config_target(update)
+                user_config = await SettingsService(session).get_config(target)
                 if platform.id in user_config.disabled_platforms:
                     return False
                 return True
         else:
             return True
 
-    return filters.create(func, use_user_config=use_user_config)
+    return filters.create(func, use_user_config=use_config)
 
 
 async def _via_me(_: Any, __: Any, update: Message) -> bool:
