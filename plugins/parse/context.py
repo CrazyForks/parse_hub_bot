@@ -12,6 +12,9 @@ if TYPE_CHECKING:
     from pyrogram.types import Message
 
 
+GIF_ONLY_SKIP_DOWNLOAD_COUNT_THRESHOLD = 5
+
+
 @dataclass(frozen=True, slots=True)
 class ParseRequest:
     cli: Client
@@ -61,5 +64,5 @@ class ParseOptions:
                     skip_media_processing=False,
                     singleflight=not bypass_cache,
                     save_metadata=False,
-                    gif_only_skip_download_count_threshold=5,
+                    gif_only_skip_download_count_threshold=GIF_ONLY_SKIP_DOWNLOAD_COUNT_THRESHOLD,
                 )

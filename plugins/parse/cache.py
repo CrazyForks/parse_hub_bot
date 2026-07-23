@@ -1,7 +1,6 @@
-from parsehub.types import AnyParseResult
 from pyrogram.types import InputMediaDocument, InputMediaPhoto, InputMediaVideo, Message
 
-from services import CacheEntry, CacheMedia, CacheMediaType, CacheParseResult
+from services import CacheMedia, CacheMediaType
 
 
 def cache_media_from_message(m: Message) -> CacheMedia | None:
@@ -19,13 +18,6 @@ def cache_media_from_message(m: Message) -> CacheMedia | None:
     if m.document:
         return CacheMedia(type=CacheMediaType.DOCUMENT, file_id=m.document.file_id)
     return None
-
-
-def make_cache_entry(parse_result: AnyParseResult, media_list: list[CacheMedia]) -> CacheEntry:
-    return CacheEntry(
-        parse_result=CacheParseResult(title=parse_result.title, content=parse_result.content),
-        media=media_list,
-    )
 
 
 def build_cached_media_group(

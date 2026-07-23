@@ -22,14 +22,13 @@ from utils.helpers import to_list, with_request_id
 from utils.rate_limit import ParseRateLimitExceeded, parse_rate_limit
 
 logger = logger.bind(name="Parse")
-SKIP_DOWNLOAD_THRESHOLD = 0
 
 
 @Client.on_message(
     filters.command(["jx", "jxjx", "raw", "zip"])
     | ((filters.text | filters.caption) & ~via_me_filter & platform_filter(True) & ~forwarded_from_bot_filter)
 )
-async def jx(cli: Client, msg: Message) -> None:
+async def parse(cli: Client, msg: Message) -> None:
     bypass_cache = False
     lang = None
     mode = ParseMode.PREVIEW
@@ -153,7 +152,6 @@ async def handle_parse(req: ParseRequest) -> None:
         parse_result=cached_parse_result,
         singleflight=options.singleflight,
         skip_media_processing=options.skip_media_processing,
-        skip_download_threshold=SKIP_DOWNLOAD_THRESHOLD,
         gif_only_skip_download_count_threshold=options.gif_only_skip_download_count_threshold,
         save_metadata=options.save_metadata,
         t=req.t_,

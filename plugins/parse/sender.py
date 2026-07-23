@@ -29,9 +29,9 @@ from pyrogram.types import (
 from core import bs
 from log import logger
 from plugins.helpers import build_caption, build_caption_by_str, format_label
-from plugins.parse.cache import build_cached_media_group, cache_media_from_message, make_cache_entry
+from plugins.parse.cache import build_cached_media_group, cache_media_from_message
 from repo.settings import SettingsConfig
-from services import CacheEntry, CacheMedia, CacheMediaType, PipelineResult, StatusReporter
+from services import CacheEntry, CacheMedia, CacheMediaType, CacheParseResult, PipelineResult, StatusReporter
 from services.media import ProcessedMedia, resolve_media_info
 from utils.helpers import pack_dir_to_tar_gz, to_list
 
@@ -388,7 +388,10 @@ async def send_media(
 
     if media_list is None:
         return None
-    return make_cache_entry(parse_result, media_list)
+    return CacheEntry(
+        parse_result=CacheParseResult(title=parse_result.title, content=parse_result.content),
+        media=media_list,
+    )
 
 
 async def send_cached(sender: MessageSender, entry: CacheEntry, url: str) -> None:
