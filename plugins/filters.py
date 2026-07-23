@@ -8,11 +8,11 @@ from plugins.context import get_config_target
 from services import ParseService, SettingsService
 
 
-def platform_filter(use_user_config: bool = False) -> filters.Filter:
+def platform_filter(use_config: bool = False) -> filters.Filter:
     """
     平台过滤器
     Args:
-        use_user_config: 使用用户配置
+        use_config: 使用用户配置
 
     Returns:
 
@@ -47,7 +47,7 @@ def platform_filter(use_user_config: bool = False) -> filters.Filter:
         else:
             return True
 
-    return filters.create(func, use_user_config=use_user_config)
+    return filters.create(func, use_user_config=use_config)
 
 
 async def _via_me(_: Any, __: Any, update: Message) -> bool:
