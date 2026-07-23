@@ -7,10 +7,12 @@ from pyrogram.errors import FloodWait, Forbidden, SlowmodeWait
 from pyrogram.types import LinkPreviewOptions, Message
 
 from core import bs
+from db import get_session
 from log import logger
+from plugins.context import get_config_target
 from plugins.helpers import format_label
 from repo.settings import SettingsConfig
-from services import StatusReporter
+from services import SettingsService, StatusReporter
 
 logger = logger.bind(name="ParseReporter")
 
@@ -64,6 +66,12 @@ class MessageStatusReporter(StatusReporter):
             pass
         except Forbidden as e:
             logger.warning(f"消息发送失败, Bot 无权限: {e}")
+            if self._user_msg:
+                self._config.noprogress = True
+                target = get_config_target(self._user_msg, include_member=False)
+                async with get_session() as session:
+                    await SettingsService(session).patch_config(target=target, noprogress=True)
+                logger.warning(f"已自动关闭解析进度: {target}")
 
 
 class InlineStatusReporter(StatusReporter):
